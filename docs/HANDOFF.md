@@ -85,5 +85,5 @@ python -I scripts/e2e/walk.py <โฟลเดอร์เก็บภาพ>
 
 ## ไฟล์ที่อยู่ในเครื่องแต่ไม่อยู่ใน git
 
-- `.claude/skills/` skill ดีไซน์ที่โหลดมา: `emil-design-eng`, `apple-design`, `mobile-native`, `animate-expo`, `break-ui` (จาก github.com/emilkowalski/skills) และ `design-taste-frontend` (จาก github.com/Leonxlnx/taste-skill) โหลดเฉพาะโปรเจคนี้
+- skill ดีไซน์ติดตั้งแบบ global ที่ `~/.claude/skills/` (ใช้ได้ทุกโปรเจคบนเครื่องนี้): ของ Emil Kowalski ครบ 15 ตัว (github.com/emilkowalski/skills) และ taste-skill 5 ตัว `design-taste-frontend`, `redesign-existing-projects`, `high-end-visual-design`, `minimalist-ui`, `industrial-brutalist-ui` (github.com/Leonxlnx/taste-skill) ทั้งสอง repo เป็น MIT เพื่อนในกลุ่มต้องติดตั้งเองในเครื่องตัวเอง
 - `design-refs/visual-directions.jpg` ภาพ reference 3 แนว (Luma, Eventpop, Partiful) ที่ใช้เลือกหน้าตา

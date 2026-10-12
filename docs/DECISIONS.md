@@ -62,6 +62,7 @@
 - Emil Kowalski (github.com/emilkowalski/skills): ส่วนใหญ่เป็นเว็บ แต่มี `animate-expo` (React Native) และ `mobile-native` (ทำเว็บให้รู้สึกเหมือนแอพ)
 - taste-skill (github.com/Leonxlnx/taste-skill): เน้นเว็บ landing page แต่กฎกันงานดู AI ใช้กับแอพได้
 - ดู Expo official skills กับ ui-ux-pro-max แล้ว ยังไม่ต้องใช้เพราะเลือก PWA
+- ภายหลังผู้ใช้ขอให้ติดตั้งทุกตัวแบบ global: ลงของ Emil ครบ 15 ตัว และ taste-skill 5 ตัว ไม่ลง 8 ตัวที่เหลือ เพราะต้องใช้เครื่องมือสร้างภาพที่ Claude Code ไม่มี (`brandkit`, `image-to-code`, `imagegen-frontend-mobile`, `imagegen-frontend-web`), เขียนไว้สำหรับเครื่องมืออื่น (`stitch-design-taste`, `gpt-taste`), ซ้ำกับตัวหลัก (`design-taste-frontend-v1`) หรือบังคับให้ตอบยาว (`full-output-enforcement`)
 
 ## ข้อมูลอ้างอิงสำหรับตอน pitch
 
