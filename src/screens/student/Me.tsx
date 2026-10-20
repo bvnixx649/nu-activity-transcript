@@ -7,6 +7,8 @@ import { useStore } from '../../store'
 import type { Category } from '../../data/types'
 import { Avatar, CountUp, EASE_OUT, Page, Sheet } from '../../ui/kit'
 import { CAT_LABEL, fmtDate, fmtHours } from '../../lib/format'
+import { semesterEnd, semesterStart, strikesOf } from '../../lib/credit'
+import { STRIKE_LIMIT } from '../../config'
 
 export default function Me() {
   const navigate = useNavigate()
@@ -19,6 +21,9 @@ export default function Me() {
   const logout = useStore((s) => s.logout)
   const resetDemo = useStore((s) => s.resetDemo)
   const [confirm, setConfirm] = useState<null | 'logout' | 'reset'>(null)
+  const registrations = useStore((s) => s.registrations)
+  const lateCancels = useStore((s) => s.lateCancels)
+  const waivers = useStore((s) => s.waivers)
   const student = me ? students[me] : undefined
 
   const { byCat, total } = useMemo(() => {
@@ -29,6 +34,15 @@ export default function Me() {
   }, [credits, me])
 
   const sum = (c: Category) => byCat[c].reduce((s, x) => s + x.hours, 0)
+
+  const strikes = useMemo(
+    () => (me ? strikesOf({ activities, registrations, credits, lateCancels, waivers }, me) : []),
+    [activities, registrations, credits, lateCancels, waivers, me],
+  )
+  const used = strikes.filter((x) => !x.waived).length
+  const left = Math.max(0, STRIKE_LIMIT - used)
+  const semStart = new Date(semesterStart())
+  const semLabel = semStart.getMonth() === 4 ? 'ภาคการศึกษาที่ 1' : 'ภาคการศึกษาที่ 2'
 
   return (
     <Page tabbar memoryKey="me">
@@ -92,6 +106,11 @@ export default function Me() {
                           <span className="clamp-1">{activities.find((a) => a.id === cr.activityId)?.title ?? cr.title}</span>
                           <span className="t-small">
                             {fmtDate(cr.at)} {cr.method === 'manual' ? 'ยืนยันโดยผู้คุม' : 'สแกน QR'}
+                            {activities.find((a) => a.id === cr.activityId)?.recordedAt ? (
+                              <b className="t-success"> บันทึกลงระบบแล้ว</b>
+                            ) : (
+                              ' รอศูนย์บันทึก'
+                            )}
                           </span>
                         </div>
                         <span className="num t-strong">+{fmtHours(cr.hours)}</span>
@@ -102,6 +121,46 @@ export default function Me() {
                 </div>
               </div>
             ) : null,
+          )}
+        </section>
+
+        <section className="card mt-16" style={{ padding: 20 }}>
+          <div className="row between gap-12">
+            <div className="stack">
+              <h2 className="t-h3">เครดิตการเข้าร่วม</h2>
+              <span className="t-small">
+                {semLabel} รีเซ็ต {fmtDate(semesterEnd())}
+              </span>
+            </div>
+            <span className="num" style={{ fontSize: 30, fontWeight: 700, color: left <= 1 ? 'var(--accent-ink)' : undefined }}>
+              {left}
+              <span className="t-meta">/{STRIKE_LIMIT}</span>
+            </span>
+          </div>
+          <div className="credit-pips mt-12" aria-hidden>
+            {Array.from({ length: STRIKE_LIMIT }, (_, i) => (
+              <i key={i} className={i < left ? 'on' : ''} />
+            ))}
+          </div>
+          <p className="t-small mt-12">
+            {left === 0
+              ? 'เครดิตหมดแล้ว สมัครกิจกรรมใหม่ไม่ได้จนถึงภาคการศึกษาหน้า'
+              : 'ยกเลิกหลังกำหนดหรือไม่มาจะถูกหัก 1 ครั้ง ถ้าหมดจะสมัครกิจกรรมไม่ได้จนจบภาค มีเหตุสุดวิสัยให้ติดต่อผู้คุมกิจกรรมนั้นเพื่อขอคืน'}
+          </p>
+          {strikes.length > 0 && (
+            <div className="stack list mt-8">
+              {strikes.map((x) => (
+                <Link key={`${x.kind}-${x.a.id}`} to={`/a/${x.a.id}`} className="row gap-12 press" style={{ padding: '12px 0' }}>
+                  <div className="stack grow" style={{ minWidth: 0 }}>
+                    <span className="clamp-1">{x.a.title}</span>
+                    <span className="t-small">
+                      {fmtDate(x.at)} {x.kind === 'late' ? 'ยกเลิกหลังกำหนด' : 'ลงทะเบียนแต่ไม่มา'}
+                    </span>
+                  </div>
+                  {x.waived ? <span className="chip success">คืนแล้ว</span> : <span className="chip danger">-1</span>}
+                </Link>
+              ))}
+            </div>
           )}
         </section>
 

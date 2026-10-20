@@ -1,12 +1,13 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { CalendarBlankIcon, QrCodeIcon } from '@phosphor-icons/react'
+import { CalendarBlankIcon, ListBulletsIcon, QrCodeIcon } from '@phosphor-icons/react'
 import { useStore, regCount } from '../../store'
 import type { Category } from '../../data/types'
 import { Avatar, CountUp, EASE_OUT, Empty, Page, PosterCard, Segmented } from '../../ui/kit'
 import { fmtHours, fmtTime, phase } from '../../lib/format'
 import { useNow, useSessionState } from '../../lib/hooks'
+import { MonthCalendar, dayKey } from '../../ui/calendar'
 
 type Filter = 'all' | Category
 
@@ -19,7 +20,10 @@ export default function Home() {
   const credits = useStore((s) => s.credits)
   const extraReg = useStore((s) => s.extraReg)
   const [filter, setFilter] = useSessionState<Filter>('home-filter', 'all')
+  const [view, setView] = useSessionState<'list' | 'cal'>('home-view', 'list')
   const now = useNow()
+  const [month, setMonth] = useState(() => Date.now())
+  const [day, setDay] = useState<string | null>(() => dayKey(Date.now()))
 
   const student = me ? students[me] : undefined
   const firstName = student?.name.split(' ')[0] ?? ''
@@ -133,6 +137,14 @@ export default function Home() {
           <h2 className="t-title" style={{ fontSize: 22 }}>
             กิจกรรมที่เปิดรับ
           </h2>
+          <div className="view-toggle" role="group" aria-label="รูปแบบการแสดง">
+            <button className={view === 'list' ? 'on' : ''} onClick={() => setView('list')} aria-label="ดูเป็นรายการ" aria-pressed={view === 'list'}>
+              <ListBulletsIcon size={20} weight="bold" />
+            </button>
+            <button className={view === 'cal' ? 'on' : ''} onClick={() => setView('cal')} aria-label="ดูเป็นปฏิทิน" aria-pressed={view === 'cal'}>
+              <CalendarBlankIcon size={20} weight="bold" />
+            </button>
+          </div>
         </div>
         <div className="mt-12">
           <Segmented
@@ -147,7 +159,21 @@ export default function Home() {
           />
         </div>
 
-        <div className="stack gap-32 mt-20">
+        {view === 'cal' && (
+          <div className="stack gap-20 mt-20">
+            <MonthCalendar activities={feed.map((f) => f.a)} month={month} onMonth={setMonth} selected={day} onSelect={setDay} now={now} />
+            {(() => {
+              const list = day ? feed.filter((f) => dayKey(f.a.start) === day) : []
+              if (!day) return <p className="t-meta">แตะวันที่เพื่อดูกิจกรรม</p>
+              if (!list.length) return <p className="t-meta">ไม่มีกิจกรรมที่เปิดรับในวันที่เลือก</p>
+              return list.map((f, i) => (
+                <PosterCard key={f.a.id} index={i} a={f.a} registered={f.registered} credited={f.credited} seatsLeft={f.seatsLeft} />
+              ))
+            })()}
+          </div>
+        )}
+
+        <div className="stack gap-32 mt-20" style={view === 'cal' ? { display: 'none' } : undefined}>
           {feed.map((f, i) => (
             <PosterCard key={f.a.id} index={i} a={f.a} registered={f.registered} credited={f.credited} seatsLeft={f.seatsLeft} />
           ))}

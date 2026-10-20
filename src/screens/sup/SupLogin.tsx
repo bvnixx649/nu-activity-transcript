@@ -5,8 +5,9 @@ import { useStore } from '../../store'
 import { ORGS } from '../../data/seed'
 import { EASE_OUT, Page, TopBar } from '../../ui/kit'
 import { haptic } from '../../lib/device'
+import { ADMIN_CODE, ADMIN_ORG } from '../../config'
 
-const DEMO = ['NUVOL26', 'SCI2569']
+const DEMO = ['NUVOL26', 'SCI2569', ADMIN_CODE]
 
 export default function SupLogin() {
   const navigate = useNavigate()
@@ -22,7 +23,7 @@ export default function SupLogin() {
     e.preventDefault()
     if (supLogin(code, name)) {
       haptic.success()
-      navigate('/sup', { replace: true })
+      navigate(code.trim().toUpperCase() === ADMIN_CODE ? '/sup/admin' : '/sup', { replace: true })
     } else {
       haptic.error()
       setErr('ไม่พบรหัสหน่วยงานนี้ ตรวจสอบกับกองกิจการนิสิตอีกครั้ง')
@@ -36,7 +37,7 @@ export default function SupLogin() {
       <form className="pad stack gap-24" onSubmit={submit} style={{ paddingBottom: 40 }}>
         <div className="stack gap-8">
           <h1 className="t-title">โหมดผู้คุมกิจกรรม</h1>
-          <p className="t-meta">ใช้รหัสหน่วยงานที่ได้รับจากกองกิจการนิสิต เพื่อโพสต์กิจกรรม ส่งประกาศ และเปิด QR ให้นิสิตรับชั่วโมง</p>
+          <p className="t-meta">ใช้รหัสหน่วยงานที่ได้รับจากกองกิจการนิสิต เพื่อโพสต์กิจกรรม ส่งประกาศ และเปิด QR ให้นิสิตรับชั่วโมง เจ้าหน้าที่ศูนย์จิตอาสาใช้รหัสแอดมิน</p>
         </div>
         <div className="field">
           <label htmlFor="sname">ชื่อผู้คุมกิจกรรม</label>
@@ -79,7 +80,7 @@ export default function SupLogin() {
               >
                 <span className="num">{c}</span>
                 <span className="t-small" style={{ fontWeight: 500 }}>
-                  {ORGS[c]}
+                  {c === ADMIN_CODE ? `${ADMIN_ORG} (แอดมิน)` : ORGS[c]}
                 </span>
               </motion.button>
             ))}

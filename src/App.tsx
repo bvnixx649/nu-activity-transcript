@@ -3,6 +3,7 @@ import { HashRouter, Navigate, NavLink, Route, Routes, useLocation, useNavigate,
 import { AnimatePresence, motion } from 'motion/react'
 import { BellIcon, HouseIcon, QrCodeIcon, TicketIcon, UserCircleIcon } from '@phosphor-icons/react'
 import { useStore } from './store'
+import { useNow } from './lib/hooks'
 import { EASE_DRAWER } from './ui/kit'
 import { haptic } from './lib/device'
 import Welcome from './screens/student/Welcome'
@@ -20,6 +21,7 @@ import SupHome from './screens/sup/SupHome'
 import Editor from './screens/sup/Editor'
 import Manage from './screens/sup/Manage'
 import Presenter from './screens/sup/Presenter'
+import AdminHome, { AdminActivity } from './screens/sup/Admin'
 
 type Mode = 'push' | 'pop' | 'up' | 'down' | 'fade' | 'none'
 type Kind = 'root' | 'stack' | 'modal'
@@ -27,7 +29,7 @@ type Kind = 'root' | 'stack' | 'modal'
 const TAB_PATHS = ['/', '/mine', '/inbox', '/me']
 
 function kindOf(path: string): Kind {
-  if (TAB_PATHS.includes(path) || path === '/sup' || path === '/welcome' || path === '/sup/login') return 'root'
+  if (TAB_PATHS.includes(path) || path === '/sup' || path === '/sup/admin' || path === '/welcome' || path === '/sup/login') return 'root'
   if (/^\/(scan|claim)/.test(path) || /\/qr$/.test(path)) return 'modal'
   return 'stack'
 }
@@ -122,6 +124,9 @@ function Shell() {
   const navType = useNavigationType()
   const me = useStore((s) => s.me)
   const sup = useStore((s) => s.sup)
+  const checkReminders = useStore((s) => s.checkReminders)
+  const tick = useNow(15_000)
+  useEffect(() => checkReminders(), [tick, checkReminders])
   const prev = useRef(location.pathname)
   const path = location.pathname
 
@@ -137,13 +142,15 @@ function Shell() {
   if (!me && path !== '/welcome' && !path.startsWith('/sup')) redirect = '/welcome'
   else if (me && path === '/welcome') redirect = '/'
   else if (path.startsWith('/sup') && path !== '/sup/login' && !sup) redirect = '/sup/login'
+  else if (sup?.admin && path === '/sup') redirect = '/sup/admin'
+  else if (sup && !sup.admin && path.startsWith('/sup/admin')) redirect = '/sup'
 
   const showTabs = !!me && TAB_PATHS.includes(path)
 
   if (redirect) return <Navigate to={redirect} replace />
 
   return (
-    <div className="shell">
+    <div className={`shell ${path.startsWith('/sup/admin') ? 'wide' : ''}`}>
       <AnimatePresence initial={false} custom={mode}>
         <motion.div
           key={path}
@@ -174,6 +181,8 @@ function Shell() {
             <Route path="/sup/a/:id" element={<Manage />} />
             <Route path="/sup/a/:id/chat" element={<ChatScreen role="sup" />} />
             <Route path="/sup/a/:id/qr" element={<Presenter />} />
+            <Route path="/sup/admin" element={<AdminHome />} />
+            <Route path="/sup/admin/a/:id" element={<AdminActivity />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </motion.div>

@@ -6,7 +6,8 @@ import { useStore } from './store'
 import { registerSW } from './lib/device'
 import './styles.css'
 
-useStore.getState().rebase()
+if (useStore.getState().reseed) useStore.getState().resetDemo()
+else useStore.getState().rebase()
 registerSW()
 
 createRoot(document.getElementById('root')!).render(

@@ -1,11 +1,12 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
 import { toast } from 'sonner'
-import type { Activity, ChatMsg, Credit, Notice, NoticeKind, NotifySettings, Registration, Student } from './data/types'
+import type { Activity, ChatMsg, Credit, LateCancel, Notice, NoticeKind, NotifySettings, Registration, Student } from './data/types'
 import {
   EXTRA_REGISTERED,
   ORGS,
   PERSONAL_CREDITS,
+  PERSONAL_NOSHOW,
   PERSONAL_REGS,
   personalNotices,
   seedActivities,
@@ -16,6 +17,8 @@ import {
 import { hashPin } from './lib/qr'
 import { uid } from './lib/format'
 import { systemNotify } from './lib/device'
+import { creditsLeft, freeCancelUntil, waiverKey } from './lib/credit'
+import { ADMIN_CODE, ADMIN_ORG } from './config'
 
 const H = 3600_000
 
@@ -23,6 +26,8 @@ export interface SupSession {
   code: string
   org: string
   name: string
+  /** Volunteer centre admin: receives rosters and records hours. */
+  admin?: boolean
 }
 
 interface Data {
@@ -33,24 +38,39 @@ interface Data {
   chats: ChatMsg[]
   notices: Notice[]
   extraReg: Record<string, number>
+  lateCancels: LateCancel[]
+  /** waiverKey(activityId, studentId) of lost credits a supervisor gave back. */
+  waivers: string[]
+  /** Scheduled activities the student asked to be told about when registration opens. */
+  reminders: string[]
+  reminded: string[]
   settings: NotifySettings
   me: string | null
   sup: SupSession | null
   mode: 'student' | 'supervisor'
   seededAt: number
+  /** Set by migrate when the seed shape changed; main.tsx reseeds once. */
+  reseed?: boolean
 }
 
 interface Actions {
   signUp: (s: { id: string; name: string; faculty: string; pin: string }) => void
   login: (id: string, pin: string) => 'ok' | 'unknown' | 'wrong'
   logout: () => void
-  register: (activityId: string) => void
-  cancel: (activityId: string) => void
+  register: (activityId: string) => boolean
+  /** Returns true when the cancellation cost a credit. */
+  cancel: (activityId: string) => boolean
+  waive: (activityId: string, studentId: string) => void
+  toggleReminder: (activityId: string) => void
+  checkReminders: () => void
   addCredit: (c: Credit) => boolean
   revokeCredit: (activityId: string, studentId: string) => void
   addWalkIn: (activityId: string, s: Student) => void
   removeRegistration: (activityId: string, studentId: string) => void
   upsertActivity: (a: Activity, isNew: boolean) => void
+  closeRoster: (activityId: string) => void
+  submitRoster: (activityId: string) => void
+  recordHours: (activityId: string) => void
   postAnnouncement: (activityId: string, text: string, images: string[]) => void
   sendChat: (activityId: string, text: string, asSup: boolean) => void
   notify: (kind: NoticeKind, title: string, body: string, activityId?: string) => void
@@ -78,6 +98,10 @@ function freshData(): Data {
     chats: seedChats(students, now),
     notices: [],
     extraReg: { ...EXTRA_REGISTERED },
+    lateCancels: [],
+    waivers: [],
+    reminders: [],
+    reminded: [],
     settings: { enabled: false, newActivities: true, announcements: true, chat: false, reminders: true },
     me: null,
     sup: null,
@@ -122,6 +146,11 @@ export const useStore = create<State>()(
           const acts = s.activities
           const regs = s.registrations.filter((r) => r.studentId !== id)
           PERSONAL_REGS.forEach((aid, i) => regs.push({ activityId: aid, studentId: id, at: now - (2 + i) * 24 * H }))
+          // one missed activity, so the profile shows a lost credit
+          PERSONAL_NOSHOW.forEach((aid) => {
+            const a = acts.find((x) => x.id === aid)
+            if (a) regs.push({ activityId: aid, studentId: id, at: a.start - 4 * 24 * H })
+          })
           const credits = s.credits.filter((c) => c.studentId !== id)
           PERSONAL_CREDITS.forEach((aid) => {
             const a = acts.find((x) => x.id === aid)
@@ -161,16 +190,43 @@ export const useStore = create<State>()(
       logout: () => set({ me: null, sup: null, mode: 'student' }),
 
       register: (activityId) => {
-        const { me, registrations, activities } = get()
-        if (!me || registrations.some((r) => r.activityId === activityId && r.studentId === me)) return
-        set({ registrations: [...registrations, { activityId, studentId: me, at: Date.now() }] })
+        const st = get()
+        const { me, registrations, activities } = st
         const a = activities.find((x) => x.id === activityId)
-        if (a) get().notify('registered', 'ลงทะเบียนสำเร็จ', a.title, a.id)
+        if (!me || !a || registrations.some((r) => r.activityId === activityId && r.studentId === me)) return false
+        if ((a.opensAt && Date.now() < a.opensAt) || creditsLeft(st, me) === 0) return false
+        set({ registrations: [...registrations, { activityId, studentId: me, at: Date.now() }] })
+        get().notify('registered', 'ลงทะเบียนสำเร็จ', a.title, a.id)
+        return true
       },
 
       cancel: (activityId) => {
-        const { me } = get()
-        set((s) => ({ registrations: s.registrations.filter((r) => !(r.activityId === activityId && r.studentId === me)) }))
+        const { me, activities } = get()
+        const a = activities.find((x) => x.id === activityId)
+        if (!me || !a) return false
+        const late = Date.now() > freeCancelUntil(a)
+        set((s) => ({
+          registrations: s.registrations.filter((r) => !(r.activityId === activityId && r.studentId === me)),
+          lateCancels: late ? [...s.lateCancels, { activityId, studentId: me, at: Date.now() }] : s.lateCancels,
+        }))
+        return late
+      },
+
+      waive: (activityId, studentId) =>
+        set((s) => ({ waivers: [...new Set([...s.waivers, waiverKey(activityId, studentId)])] })),
+
+      toggleReminder: (activityId) =>
+        set((s) => ({
+          reminders: s.reminders.includes(activityId) ? s.reminders.filter((x) => x !== activityId) : [...s.reminders, activityId],
+        })),
+
+      checkReminders: () => {
+        const { reminders, reminded, activities } = get()
+        const now = Date.now()
+        const due = activities.filter((a) => reminders.includes(a.id) && !reminded.includes(a.id) && a.opensAt && a.opensAt <= now)
+        if (!due.length) return
+        set((s) => ({ reminded: [...s.reminded, ...due.map((a) => a.id)] }))
+        due.forEach((a) => get().notify('reminder', 'เปิดรับสมัครแล้ว', a.title, a.id))
       },
 
       addCredit: (c) => {
@@ -215,6 +271,27 @@ export const useStore = create<State>()(
         if (isNew) get().notify('new', `กิจกรรมใหม่จาก${a.org}`, `${a.title} ได้รับ ${a.hours} ชั่วโมง`, a.id)
       },
 
+      closeRoster: (activityId) =>
+        set((s) => ({ activities: s.activities.map((x) => (x.id === activityId ? { ...x, closedAt: Date.now() } : x)) })),
+
+      submitRoster: (activityId) =>
+        set((s) => ({
+          activities: s.activities.map((x) =>
+            x.id === activityId ? { ...x, closedAt: x.closedAt ?? Date.now(), submittedAt: Date.now() } : x,
+          ),
+        })),
+
+      recordHours: (activityId) => {
+        const { activities, credits, me } = get()
+        const a = activities.find((x) => x.id === activityId)
+        if (!a) return
+        set((s) => ({ activities: s.activities.map((x) => (x.id === activityId ? { ...x, recordedAt: Date.now() } : x)) }))
+        // Every credited student is notified; on this demo device that is only the signed-in one.
+        const mine = credits.find((c) => c.activityId === activityId && c.studentId === me)
+        if (mine)
+          get().notify('credit', 'บันทึกชั่วโมงลงระบบแล้ว', `${a.title} เข้าไปยืนยัน ${mine.hours} ชั่วโมงในระบบของมหาวิทยาลัย`, a.id)
+      },
+
       postAnnouncement: (activityId, text, images) => {
         const a = get().activities.find((x) => x.id === activityId)
         if (!a) return
@@ -247,6 +324,10 @@ export const useStore = create<State>()(
 
       supLogin: (code, name) => {
         const c = code.trim().toUpperCase()
+        if (c === ADMIN_CODE) {
+          set({ sup: { code: c, org: ADMIN_ORG, name: name.trim() || 'เจ้าหน้าที่ศูนย์จิตอาสา', admin: true }, mode: 'supervisor' })
+          return true
+        }
         const org = ORGS[c]
         if (!org) return false
         set({ sup: { code: c, org, name: name.trim() || 'ผู้คุมกิจกรรม' }, mode: 'supervisor' })
@@ -270,6 +351,10 @@ export const useStore = create<State>()(
                   start: sh(a.start),
                   end: sh(a.end),
                   createdAt: sh(a.createdAt),
+                  opensAt: a.opensAt && sh(a.opensAt),
+                  closedAt: a.closedAt && sh(a.closedAt),
+                  submittedAt: a.submittedAt && sh(a.submittedAt),
+                  recordedAt: a.recordedAt && sh(a.recordedAt),
                   announcements: a.announcements.map((n) => ({ ...n, at: sh(n.at) })),
                 }
               : a,
@@ -278,13 +363,14 @@ export const useStore = create<State>()(
           credits: s.credits.map((c) => ({ ...c, at: sh(c.at) })),
           chats: s.chats.map((c) => ({ ...c, at: sh(c.at) })),
           notices: s.notices.map((n) => ({ ...n, at: sh(n.at) })),
+          lateCancels: s.lateCancels.map((c) => ({ ...c, at: sh(c.at) })),
         }))
       },
 
       resetDemo: () => {
         const keep = get()
         const d = freshData()
-        set(d)
+        set({ ...d, reseed: false })
         if (keep.me && keep.students[keep.me]) {
           const me = keep.students[keep.me]
           set({ students: { ...get().students, [me.id]: me } })
@@ -298,7 +384,9 @@ export const useStore = create<State>()(
     {
       name: 'nuat-demo-v1',
       storage: createJSONStorage(() => safeStorage),
-      version: 1,
+      version: 4,
+      // v2 added workflow stages and a year of history: reseed, keeping the signed-in student.
+      migrate: (old) => ({ ...(old as object), reseed: true }) as State,
     },
   ),
 )

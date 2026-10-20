@@ -27,6 +27,16 @@ export interface Activity {
   openChatUrl?: string
   announcements: Announcement[]
   createdAt: number
+  /** Registration opens at this time. Missing means open on publish. */
+  opensAt?: number
+  /** Free cancellation until this many days before start. Missing means CANCEL_DAYS. */
+  cancelDays?: number
+  /** Supervisor closed the roster. After that, unscanned registrants count as no-shows. */
+  closedAt?: number
+  /** Roster sent to the volunteer centre. */
+  submittedAt?: number
+  /** The centre recorded the hours in the university system. */
+  recordedAt?: number
   /** Demo data: its dates slide forward so the demo always has a live activity. */
   seed?: boolean
 }
@@ -84,4 +94,11 @@ export interface NotifySettings {
   announcements: boolean
   chat: boolean
   reminders: boolean
+}
+
+/** A cancellation after the free-cancel deadline. No-shows are derived from the roster, not stored. */
+export interface LateCancel {
+  activityId: string
+  studentId: string
+  at: number
 }

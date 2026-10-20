@@ -5,6 +5,10 @@ import { toast } from 'sonner'
 import {
   CaretRightIcon,
   ChatCircleDotsIcon,
+  CheckCircleIcon,
+  HourglassIcon,
+  ListChecksIcon,
+  PaperPlaneTiltIcon,
   FileXlsIcon,
   ImageSquareIcon,
   MagnifyingGlassIcon,
@@ -14,10 +18,15 @@ import {
   XIcon,
 } from '@phosphor-icons/react'
 import { useStore, regCount } from '../../store'
-import type { Student } from '../../data/types'
+import type { Activity, Student } from '../../data/types'
+import { StageBar } from '../../ui/stage'
+import { useNow } from '../../lib/hooks'
+import { AUTO_CLOSE_H } from '../../config'
+import { closedAt, daysToSubmit, stage, submitDeadline } from '../../lib/stage'
+import { waiverKey } from '../../lib/credit'
 import { FACULTIES } from '../../data/seed'
 import { Avatar, EASE_OUT, Empty, Lightbox, Page, Segmented, Sheet, TopBar } from '../../ui/kit'
-import { CAT_LABEL, fmtDate, fmtDay, fmtHours, fmtRange, fmtTime, phase, timeAgo } from '../../lib/format'
+import { CAT_LABEL, fmtDate, fmtDay, fmtHours, fmtRange, fmtTime, relDay, timeAgo } from '../../lib/format'
 import { compressImage, haptic } from '../../lib/device'
 
 type Filter = 'all' | 'done' | 'wait'
@@ -38,6 +47,13 @@ export default function Manage() {
   const [picked, setPicked] = useState<Student | null>(null)
   const [adding, setAdding] = useState(false)
   const [lightbox, setLightbox] = useState<string | null>(null)
+  const [confirm, setConfirm] = useState<'close' | 'submit' | null>(null)
+  const closeRoster = useStore((s) => s.closeRoster)
+  const submitRoster = useStore((s) => s.submitRoster)
+  const now = useNow()
+  const waivers = useStore((s) => s.waivers)
+  const lateCancels = useStore((s) => s.lateCancels)
+  const waive = useStore((s) => s.waive)
 
   const roster = useMemo(() => {
     const cr = new Map(credits.filter((c) => c.activityId === id).map((c) => [c.studentId, c]))
@@ -56,7 +72,8 @@ export default function Manage() {
       (!q || r.s.name.includes(q.trim()) || r.s.id.includes(q.trim())),
   )
   const msgCount = chats.filter((c) => c.activityId === id).length
-  const ph = phase(a)
+  const closed = !!closedAt(a, now)
+  const lateHere = lateCancels.filter((c) => c.activityId === a.id)
 
   const exportXlsx = async () => {
     const { default: writeXlsxFile } = await import('write-excel-file/browser')
@@ -122,10 +139,22 @@ export default function Manage() {
             </div>
           </div>
 
-          <button className="btn btn-accent btn-block mt-16" onClick={() => navigate(`/sup/a/${a.id}/qr`)}>
-            <QrCodeIcon size={20} weight="bold" /> เปิด QR รับชั่วโมง
-          </button>
-          {ph === 'upcoming' && <p className="t-small mt-8" style={{ textAlign: 'center' }}>เปิดได้ทุกเมื่อ ปกติเปิดตอนจบกิจกรรมให้นิสิตต่อแถวสแกน</p>}
+          <div className="card mt-16" style={{ padding: '18px 10px 14px' }}>
+            <StageBar a={a} now={now} />
+          </div>
+          <StageAction
+            a={a}
+            now={now}
+            unscanned={roster.length - doneCount}
+            done={doneCount}
+            onQr={() => navigate(`/sup/a/${a.id}/qr`)}
+            onClose={() => setConfirm('close')}
+            onSubmit={() => setConfirm('submit')}
+            onWait={() => {
+              setTab('roster')
+              setFilter('wait')
+            }}
+          />
 
           {a.chatEnabled && (
             <button className="card row gap-12 press mt-12" style={{ padding: 14, width: '100%', textAlign: 'left' }} onClick={() => navigate(`/sup/a/${a.id}/chat`)}>
@@ -160,9 +189,11 @@ export default function Manage() {
                     style={{ border: 0, outline: 'none', background: 'transparent', flex: 1, minWidth: 0 }}
                   />
                 </div>
-                <button className="icon-btn" style={{ width: 44, height: 44 }} onClick={() => setAdding(true)} aria-label="เพิ่มนิสิต">
-                  <UserPlusIcon size={20} />
-                </button>
+                {!a.submittedAt && (
+                  <button className="icon-btn" style={{ width: 44, height: 44 }} onClick={() => setAdding(true)} aria-label="เพิ่มนิสิต">
+                    <UserPlusIcon size={20} />
+                  </button>
+                )}
                 <button className="icon-btn" style={{ width: 44, height: 44 }} onClick={exportXlsx} aria-label="ส่งออก Excel">
                   <FileXlsIcon size={20} />
                 </button>
@@ -186,7 +217,7 @@ export default function Manage() {
                     key={r.s.id}
                     className="row gap-12 press"
                     style={{ padding: '12px 0', width: '100%', textAlign: 'left' }}
-                    onClick={() => setPicked(r.s)}
+                    onClick={() => !a.submittedAt && setPicked(r.s)}
                   >
                     <Avatar name={r.s.name} size={40} />
                     <div className="stack grow" style={{ minWidth: 0 }}>
@@ -197,6 +228,12 @@ export default function Manage() {
                     </div>
                     {r.credit ? (
                       <span className="chip success">{r.credit.method === 'manual' ? 'เพิ่มเอง' : fmtTime(r.credit.at)}</span>
+                    ) : closed ? (
+                      waivers.includes(waiverKey(a.id, r.s.id)) ? (
+                        <span className="chip">คืนเครดิตแล้ว</span>
+                      ) : (
+                        <span className="chip danger">ไม่มา</span>
+                      )
                     ) : (
                       <span className="chip">ยังไม่สแกน</span>
                     )}
@@ -209,6 +246,40 @@ export default function Manage() {
                 </button>
               )}
               {shown.length === 0 && <p className="t-meta mt-16">ไม่พบรายชื่อ</p>}
+              {lateHere.length > 0 && (
+                <div className="mt-24">
+                  <h3 className="t-h3">ยกเลิกหลังกำหนด {lateHere.length} คน</h3>
+                  <p className="t-small mt-4">ถูกหักเครดิตแล้ว ถ้ามีเหตุสุดวิสัย กดคืนเครดิตให้ได้</p>
+                  <div className="stack list mt-8">
+                    {lateHere.map((c) => {
+                      const st = students[c.studentId]
+                      const given = waivers.includes(waiverKey(a.id, c.studentId))
+                      return (
+                        <div key={c.studentId} className="row gap-12" style={{ padding: '12px 0' }}>
+                          <Avatar name={st?.name ?? c.studentId} size={40} />
+                          <div className="stack grow" style={{ minWidth: 0 }}>
+                            <span className="clamp-1">{st?.name ?? c.studentId}</span>
+                            <span className="t-small">ยกเลิก {fmtDay(c.at)} {fmtTime(c.at)} น.</span>
+                          </div>
+                          {given ? (
+                            <span className="chip">คืนแล้ว</span>
+                          ) : (
+                            <button
+                              className="btn btn-soft btn-xs"
+                              onClick={() => {
+                                waive(a.id, c.studentId)
+                                toast.success('คืนเครดิตแล้ว', { description: st?.name })
+                              }}
+                            >
+                              คืนเครดิต
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <Posts activityId={a.id} onImage={setLightbox} />
@@ -216,15 +287,181 @@ export default function Manage() {
         </div>
       </Page>
 
-      <RosterActions student={picked} activityId={a.id} hours={a.hours} onClose={() => setPicked(null)} />
+      <RosterActions student={picked} activityId={a.id} hours={a.hours} closed={closed} onClose={() => setPicked(null)} />
       <AddStudent open={adding} activityId={a.id} onClose={() => setAdding(false)} />
       <Lightbox src={lightbox} onClose={() => setLightbox(null)} />
+      <Sheet open={!!confirm} onClose={() => setConfirm(null)}>
+        {confirm === 'close' ? (
+          <div className="stack gap-16">
+            <h2 className="t-title" style={{ fontSize: 22 }}>
+              ปิดรายชื่อ
+            </h2>
+            <p className="t-body">
+              ได้รับชั่วโมง <b className="num">{doneCount}</b> คน ยังไม่สแกน <b className="num">{roster.length - doneCount}</b> คน
+            </p>
+            <p className="t-meta">
+              คนที่ยังไม่สแกนจะถูกบันทึกว่าไม่มา ถ้ามีคนมาจริงแต่สแกนไม่ได้ ให้เพิ่มชั่วโมงให้ก่อนปิด หลังปิดแล้วยังแก้รายชื่อได้จนกว่าจะส่งให้ศูนย์
+            </p>
+            <button
+              className="btn btn-ink btn-block"
+              onClick={() => {
+                closeRoster(a.id)
+                haptic.success()
+                toast.success('ปิดรายชื่อแล้ว', { description: 'ขั้นต่อไป ส่งรายชื่อให้ศูนย์จิตอาสา' })
+                setConfirm(null)
+              }}
+            >
+              ปิดรายชื่อ
+            </button>
+          </div>
+        ) : (
+          <div className="stack gap-16">
+            <h2 className="t-title" style={{ fontSize: 22 }}>
+              ส่งรายชื่อให้ศูนย์จิตอาสา
+            </h2>
+            <div className="card stack list" style={{ padding: '0 16px' }}>
+              <SumRow label="ได้รับชั่วโมง" value={`${doneCount} คน`} />
+              <SumRow label="ชั่วโมงต่อคน" value={`${fmtHours(a.hours)} ชม.`} />
+              <SumRow label="รวมทั้งหมด" value={`${fmtHours(doneCount * a.hours)} ชม.`} />
+            </div>
+            <p className="t-meta">ศูนย์จะบันทึกลงระบบของมหาวิทยาลัย แล้วแจ้งเตือนนิสิตให้เข้าไปยืนยันชั่วโมงเอง ส่งแล้วแก้รายชื่อไม่ได้</p>
+            <button
+              className="btn btn-ink btn-block"
+              onClick={() => {
+                submitRoster(a.id)
+                haptic.success()
+                toast.success('ส่งรายชื่อแล้ว', { description: 'รอศูนย์จิตอาสาบันทึกลงระบบ' })
+                setConfirm(null)
+              }}
+            >
+              <PaperPlaneTiltIcon size={18} weight="bold" /> ส่งรายชื่อ
+            </button>
+          </div>
+        )}
+      </Sheet>
     </>
   )
 }
 
-function RosterActions({ student, activityId, hours, onClose }: { student: Student | null; activityId: string; hours: number; onClose: () => void }) {
+function SumRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="row between" style={{ padding: '12px 0' }}>
+      <span className="t-meta">{label}</span>
+      <span className="t-strong num">{value}</span>
+    </div>
+  )
+}
+
+/** What the supervisor should do now, for the current stage. */
+function StageAction({
+  a,
+  now,
+  unscanned,
+  done,
+  onQr,
+  onClose,
+  onSubmit,
+  onWait,
+}: {
+  a: Activity
+  now: number
+  unscanned: number
+  done: number
+  onQr: () => void
+  onClose: () => void
+  onSubmit: () => void
+  onWait: () => void
+}) {
+  const s = stage(a, now)
+  if (s === 'scheduled' || s === 'open')
+    return (
+      <div className="stack gap-8 mt-12">
+        <p className="t-meta">
+          {s === 'scheduled' && a.opensAt
+            ? `เปิดรับสมัคร ${fmtDay(a.opensAt)} ${fmtTime(a.opensAt)} น. นิสิตเห็นกิจกรรมล่วงหน้าและกดเตือนได้`
+            : `เปิดรับสมัครอยู่ กิจกรรมเริ่ม${relDay(a.start, now) === 'วันนี้' ? 'วันนี้' : ` ${fmtDay(a.start)}`} ${fmtTime(a.start)} น.`}
+        </p>
+        <button className="btn btn-soft btn-block" onClick={onQr}>
+          <QrCodeIcon size={20} weight="bold" /> เปิด QR รับชั่วโมง
+        </button>
+      </div>
+    )
+  if (s === 'live')
+    return (
+      <div className="stack gap-8 mt-12">
+        <button className="btn btn-accent btn-block" onClick={onQr}>
+          <QrCodeIcon size={20} weight="bold" /> เปิด QR รับชั่วโมง
+        </button>
+        <p className="t-small" style={{ textAlign: 'center' }}>
+          ให้นิสิตสแกนก่อนกลับ จบ {fmtTime(a.end)} น.
+        </p>
+      </div>
+    )
+  if (s === 'closing') {
+    const left = Math.max(1, Math.ceil((a.end + AUTO_CLOSE_H * 3600_000 - now) / 3600_000))
+    return (
+      <div className="stack gap-8 mt-12">
+        <p className="t-meta">
+          กิจกรรมจบแล้ว ยังไม่สแกน <b className="num">{unscanned}</b> คน ตรวจรายชื่อ เพิ่มชั่วโมงให้คนที่มาจริง แล้วกดปิดรายชื่อ ถ้าไม่กด
+          ระบบจะปิดเองในอีก {left} ชม.
+        </p>
+        <div className="row gap-8">
+          {unscanned > 0 && (
+            <button className="btn btn-soft grow" onClick={onWait}>
+              ดูคนที่ยังไม่สแกน
+            </button>
+          )}
+          <button className="btn btn-ink grow" onClick={onClose}>
+            <ListChecksIcon size={18} weight="bold" /> ปิดรายชื่อ
+          </button>
+        </div>
+      </div>
+    )
+  }
+  if (s === 'submit') {
+    const d = daysToSubmit(a, now)
+    return (
+      <div className="stack gap-8 mt-12">
+        <p className={`t-meta ${d <= 5 ? 't-accent t-strong' : ''}`}>
+          {d >= 0 ? `ส่งรายชื่อให้ศูนย์จิตอาสาภายใน ${d} วัน (${fmtDate(submitDeadline(a))})` : `เลยกำหนดส่งมา ${-d} วัน`}
+        </p>
+        <button className="btn btn-ink btn-block" onClick={onSubmit}>
+          <PaperPlaneTiltIcon size={18} weight="bold" /> ส่งรายชื่อ {done} คน
+        </button>
+      </div>
+    )
+  }
+  if (s === 'waiting')
+    return (
+      <div className="card row gap-12 mt-12" style={{ padding: 16 }}>
+        <HourglassIcon size={26} className="t-accent" style={{ flex: 'none' }} />
+        <p className="t-meta grow">ส่งรายชื่อแล้ว {a.submittedAt && fmtDate(a.submittedAt)} รอศูนย์จิตอาสาบันทึกลงระบบของมหาวิทยาลัย</p>
+      </div>
+    )
+  return (
+    <div className="card row gap-12 mt-12" style={{ padding: 16 }}>
+      <CheckCircleIcon size={26} weight="fill" className="t-success" style={{ flex: 'none' }} />
+      <p className="t-meta grow">ศูนย์บันทึกชั่วโมงแล้ว {a.recordedAt && fmtDate(a.recordedAt)} แจ้งเตือนนิสิตให้ไปยืนยันแล้ว</p>
+    </div>
+  )
+}
+
+function RosterActions({
+  student,
+  activityId,
+  hours,
+  closed,
+  onClose,
+}: {
+  student: Student | null
+  activityId: string
+  hours: number
+  closed: boolean
+  onClose: () => void
+}) {
   const credits = useStore((s) => s.credits)
+  const waivers = useStore((s) => s.waivers)
+  const waive = useStore((s) => s.waive)
   const addWalkIn = useStore((s) => s.addWalkIn)
   const revoke = useStore((s) => s.revokeCredit)
   const remove = useStore((s) => s.removeRegistration)
@@ -245,6 +482,28 @@ function RosterActions({ student, activityId, hours, onClose }: { student: Stude
               ได้รับ {fmtHours(credit.hours)} ชั่วโมง เมื่อ {fmtTime(credit.at)} น.{' '}
               {credit.method === 'qr' ? `สแกน QR ห่างจากผู้คุม ${credit.distance ?? '-'} ม.` : 'ผู้คุมเพิ่มให้เอง'}
             </p>
+          )}
+          {closed && !credit && (
+            <div className="card stack gap-4" style={{ padding: 14 }}>
+              {waivers.includes(waiverKey(activityId, student.id)) ? (
+                <span className="t-strong">คืนเครดิตให้แล้ว</span>
+              ) : (
+                <>
+                  <span className="t-strong">ไม่มา ถูกหักเครดิต 1 ครั้ง</span>
+                  <span className="t-small">ถ้ามีเหตุสุดวิสัย เช่น ป่วยหรืออุบัติเหตุ คืนเครดิตให้ได้</span>
+                  <button
+                    className="btn btn-soft btn-sm mt-8"
+                    onClick={() => {
+                      waive(activityId, student.id)
+                      toast.success('คืนเครดิตแล้ว', { description: student.name })
+                      onClose()
+                    }}
+                  >
+                    คืนเครดิต
+                  </button>
+                </>
+              )}
+            </div>
           )}
           <div className="stack gap-8">
             {credit ? (

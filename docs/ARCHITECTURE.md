@@ -25,9 +25,15 @@ src/
   lib/device.ts         haptic, ย่อรูป, service worker, notification, wake lock
   lib/format.ts         วันที่ไทย (พ.ศ.), relDay, timeAgo, phase()
   lib/hooks.ts          useNow, useSessionState
+  lib/stage.ts          ขั้นสถานะกิจกรรม 6 ขั้น, กำหนดส่ง 30 วัน, ปีกิจกรรม
+  config.ts             ชุดชั่วโมง 1/5/9/18, เส้นตายยกเลิก, กำหนดส่ง, KPI, จำนวนเครดิต
+  lib/credit.ts         ภาคการศึกษา, เส้นตายยกเลิกฟรี, strikesOf/creditsLeft (ไม่มาคำนวณจากรายชื่อ ไม่ได้เก็บ)
+  ui/stage.tsx          StageBar, StageMini
+  ui/calendar.tsx       MonthCalendar
+  ui/stats.tsx          YearStats (ตัวเลขปีกิจกรรม + กราฟรายเดือน)
   ui/kit.tsx            Page, TopBar, Sheet, Segmented, Switch, Stepper, Avatar, PinPad, CountUp, PosterCard, Lightbox, Empty
   screens/student/      Welcome, Home, ActivityDetail, Chat, Scan, Claim (+Ticket, TicketView), Mine, Inbox, NotifySettings, Me
-  screens/sup/          SupLogin, SupHome, Editor, Manage, Presenter
+  screens/sup/          SupLogin, SupHome, Editor, Manage, Presenter, Admin (AdminHome, AdminActivity)
 public/posters/         รูปกิจกรรมตัวอย่าง 13 รูป
 public/nu-emblem.png    ตรามหาวิทยาลัยจาก nu.ac.th
 scripts/deploy.mjs      deploy ไป gh-pages
@@ -45,6 +51,7 @@ scripts/e2e/            สคริปต์ทดสอบ Playwright (Python)
 | `/sup/login`, `/sup` | ผู้คุม | root |
 | `/sup/new`, `/sup/edit/:id`, `/sup/a/:id`, `/sup/a/:id/chat` | สร้าง แก้ จัดการ แชท | stack |
 | `/sup/a/:id/qr` | หน้าจอ QR | modal |
+| `/sup/admin`, `/sup/admin/a/:id` | แอดมินศูนย์จิตอาสา (session ผู้คุมที่มี `admin: true`) | root, stack |
 
 Guard: ยังไม่มีบัญชีนิสิตจะเด้งไป `/welcome` ยกเว้นเส้นทาง `/sup` (ผู้คุมไม่ต้องมีบัญชีนิสิต) ถ้าเปิดลิงก์ `/claim` ก่อนสมัคร ระบบจำ token ไว้ใน sessionStorage แล้วพากลับมาหลังสมัครเสร็จ
 
@@ -52,7 +59,11 @@ Guard: ยังไม่มีบัญชีนิสิตจะเด้ง�
 
 - กิจกรรม `a-blood` (บริจาคโลหิต) ตั้งให้กำลังจัดอยู่เสมอ ใช้เดโมการสแกน
 - กิจกรรมที่มี `seed: true` จะเลื่อนเวลาไปข้างหน้าอัตโนมัติ (`rebase()` ใน store) ถ้าข้อมูลเก่ากว่า 3 ชั่วโมง เดโมเลยมีกิจกรรมกำลังจัดทุกครั้งที่เปิด
-- ตอนสมัคร (`signUp`) นิสิตใหม่จะถูกลงทะเบียน `a-blood`, `a-wai`, `a-river` และได้ชั่วโมงย้อนหลัง 3 กิจกรรม (รวม 13 ชม.) เพื่อให้ Transcript ไม่ว่าง
+- ตอนสมัคร (`signUp`) นิสิตใหม่จะถูกลงทะเบียน `a-blood`, `a-wai`, `a-river` และได้ชั่วโมงย้อนหลัง 3 กิจกรรม (รวม 19 ชม.) เพื่อให้ Transcript ไม่ว่าง
+- กิจกรรมย้อนหลังตั้งแต่ 1 พ.ค. ของปีกิจกรรม (`history()` id `h-*`) ให้สถิติและกราฟมีข้อมูล ส่วน `p-milk` (รอปิดรายชื่อ) กับ `p-bottle` (รอส่ง เหลือราว 4 วัน) ทำให้หน้าแรกผู้คุม `NUVOL26` มีงานค้างให้เดโม `a-open` ตั้งเวลาเปิดรับไว้
+- store version 3: ข้อมูลเก่าใน localStorage จะถูก reseed หนึ่งครั้ง (เก็บบัญชีนิสิตไว้)
+- นิสิตที่สมัครใหม่ถูกลงชื่อใน `p-bottle` แบบไม่มา หน้าโปรไฟล์เลยเห็นเครดิตเหลือ 2/3
+- state ใหม่: `lateCancels` (ยกเลิกหลังกำหนด), `waivers` (คีย์ `activityId:studentId` ที่ผู้คุมคืนเครดิต), `reminders`/`reminded` (เตือนเมื่อเปิดรับ ตรวจทุก 15 วินาทีใน `App.tsx`)
 - `extraReg` เติมจำนวนคนลงทะเบียนของงานใหญ่ให้ตัวเลขดูจริง (นิสิตจำลองมี 96 คน)
 - หน่วยงานและรหัส: `ORGS` ใน `data/seed.ts`
 

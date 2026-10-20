@@ -3,7 +3,10 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { AnimatePresence, motion, useScroll, useTransform } from 'motion/react'
 import { toast } from 'sonner'
 import {
+  BellRingingIcon,
+  BellSimpleIcon,
   CalendarBlankIcon,
+  CalendarXIcon,
   CaretRightIcon,
   ChatCircleDotsIcon,
   CheckIcon,
@@ -22,6 +25,18 @@ import { Avatar, BackButton, EASE_OUT, Empty, Lightbox, Page, Sheet, useScrollEl
 import { CAT_LABEL, fmtDateLong, fmtDay, fmtHours, fmtRange, fmtTime, phase, relDay, timeAgo } from '../../lib/format'
 import { useNow } from '../../lib/hooks'
 import { haptic } from '../../lib/device'
+import { creditsLeft, freeCancelUntil } from '../../lib/credit'
+import { STRIKE_LIMIT } from '../../config'
+
+/** "อีก 2 วัน 4 ชม." style countdown. */
+function countdown(ms: number) {
+  const m = Math.max(1, Math.ceil(ms / 60_000))
+  const d = Math.floor(m / 1440)
+  const h = Math.floor((m % 1440) / 60)
+  if (d > 0) return `อีก ${d} วัน${h ? ` ${h} ชม.` : ''}`
+  if (h > 0) return `อีก ${h} ชม. ${m % 60} นาที`
+  return `อีก ${m} นาที`
+}
 
 export default function ActivityDetail() {
   const { id = '' } = useParams()
@@ -34,7 +49,12 @@ export default function ActivityDetail() {
   const students = useStore((s) => s.students)
   const register = useStore((s) => s.register)
   const cancel = useStore((s) => s.cancel)
-  const [sheet, setSheet] = useState<null | 'register' | 'cancel'>(null)
+  const activities = useStore((s) => s.activities)
+  const lateCancels = useStore((s) => s.lateCancels)
+  const waivers = useStore((s) => s.waivers)
+  const reminders = useStore((s) => s.reminders)
+  const toggleReminder = useStore((s) => s.toggleReminder)
+  const [sheet, setSheet] = useState<null | 'register' | 'cancel' | 'blocked'>(null)
   const [done, setDone] = useState(false)
   const [lightbox, setLightbox] = useState<string | null>(null)
   const now = useNow()
@@ -56,9 +76,17 @@ export default function ActivityDetail() {
   const credit = myCredit({ credits, me }, a.id)
   const ph = phase(a, now)
   const student = me ? students[me] : undefined
+  const left = me ? creditsLeft({ activities, registrations, credits, lateCancels, waivers }, me, now) : STRIKE_LIMIT
+  const scheduled = !!a.opensAt && now < a.opensAt
+  const reminding = reminders.includes(a.id)
+  const freeUntil = freeCancelUntil(a)
+  const late = now > freeUntil
 
   const confirmRegister = () => {
-    register(a.id)
+    if (!register(a.id)) {
+      setSheet(null)
+      return toast.error('ลงทะเบียนไม่ได้')
+    }
     haptic.success()
     setDone(true)
     setTimeout(() => {
@@ -79,21 +107,27 @@ export default function ActivityDetail() {
           {credit ? (
             <>
               <span className="t-h3 t-success">ได้รับ {fmtHours(credit.hours)} ชม. แล้ว</span>
-              <span className="t-small">{CAT_LABEL[credit.category]}</span>
+              <span className="t-small">
+                {a.recordedAt ? 'บันทึกลงระบบแล้ว เข้าไปยืนยันในระบบ มน.' : `${CAT_LABEL[credit.category]} รอศูนย์บันทึก`}
+              </span>
             </>
           ) : (
             <>
               <span className="num" style={{ fontSize: 22, fontWeight: 700, lineHeight: 1.2 }}>
                 +{fmtHours(a.hours)} ชม.
               </span>
-              <span className="t-small">
+              <span className={`t-small ${scheduled ? 't-accent t-strong' : ''}`}>
                 {registered && ph === 'upcoming'
                   ? `ลงทะเบียนแล้ว ${relDay(a.start, now)}`
                   : ph === 'ended'
                     ? 'กิจกรรมจบแล้ว'
-                    : seatsLeft > 0
-                      ? `เหลือ ${seatsLeft} ที่`
-                      : 'ที่นั่งเต็มแล้ว'}
+                    : scheduled
+                      ? `เปิดรับ${countdown(a.opensAt! - now)}`
+                      : left === 0
+                        ? 'เครดิตภาคนี้หมดแล้ว'
+                        : seatsLeft > 0
+                          ? `เหลือ ${seatsLeft} ที่`
+                          : 'ที่นั่งเต็มแล้ว'}
               </span>
             </>
           )}
@@ -119,6 +153,24 @@ export default function ActivityDetail() {
         ) : seatsLeft <= 0 ? (
           <button className="btn btn-soft" disabled>
             เต็มแล้ว
+          </button>
+        ) : scheduled ? (
+          <button
+            className={`btn ${reminding ? 'btn-soft' : 'btn-ink'}`}
+            onClick={() => {
+              toggleReminder(a.id)
+              haptic.tap()
+              toast(reminding ? 'ยกเลิกการเตือนแล้ว' : 'จะแจ้งเตือนทันทีที่เปิดรับสมัคร', {
+                description: reminding ? undefined : `${fmtDay(a.opensAt!)} ${fmtTime(a.opensAt!)} น.`,
+              })
+            }}
+          >
+            {reminding ? <BellRingingIcon size={18} weight="fill" /> : <BellSimpleIcon size={18} weight="bold" />}
+            {reminding ? 'จะเตือนคุณ' : 'เตือนฉัน'}
+          </button>
+        ) : left === 0 ? (
+          <button className="btn btn-soft" onClick={() => setSheet('blocked')}>
+            สมัครไม่ได้
           </button>
         ) : (
           <button className="btn btn-ink" onClick={() => setSheet('register')}>
@@ -147,8 +199,18 @@ export default function ActivityDetail() {
             <span className="num t-meta">{student?.id}</span>
           </div>
           <p className="t-meta">
-            เมื่อจบกิจกรรม สแกน QR จากผู้คุมเพื่อรับ {fmtHours(a.hours)} ชั่วโมง{CAT_LABEL[a.category]} ยกเลิกได้จนถึงก่อนกิจกรรมเริ่ม
+            เมื่อจบกิจกรรม สแกน QR จากผู้คุมเพื่อรับ {fmtHours(a.hours)} ชั่วโมง{CAT_LABEL[a.category]}
           </p>
+          <div className="card stack gap-4" style={{ padding: 14, boxShadow: left === 1 ? 'inset 0 0 0 2px var(--accent)' : undefined }}>
+            <span className="t-strong">
+              {late ? 'เลยกำหนดยกเลิกฟรีแล้ว' : `ยกเลิกฟรีได้ถึง ${fmtDay(freeUntil)} ${fmtTime(freeUntil)} น.`}
+            </span>
+            <span className="t-small">
+              {late ? 'ถ้ายกเลิกหรือไม่มา' : 'ยกเลิกหลังจากนั้นหรือไม่มา'} จะถูกหักเครดิต 1 ครั้ง ภาคนี้เหลือ{' '}
+              <b className={left === 1 ? 't-accent' : ''}>{left}</b> จาก {STRIKE_LIMIT} ครั้ง
+              {left === 1 && ' ถ้าหมดจะสมัครกิจกรรมไม่ได้จนจบภาคการศึกษา'}
+            </span>
+          </div>
           <button
             className={`btn btn-block ${done ? 'btn-accent' : 'btn-ink'}`}
             onClick={confirmRegister}
@@ -181,22 +243,61 @@ export default function ActivityDetail() {
           <h2 className="t-title" style={{ fontSize: 22 }}>
             ยกเลิกการลงทะเบียน?
           </h2>
-          <p className="t-meta">ที่นั่งของคุณจะเปิดให้คนอื่นลงทะเบียนแทนทันที ถ้าเปลี่ยนใจก็ลงทะเบียนใหม่ได้ถ้ายังมีที่ว่าง</p>
+          {late ? (
+            <>
+              <div className="card stack gap-4" style={{ padding: 14, background: 'var(--danger-soft)', boxShadow: 'none' }}>
+                <span className="t-strong t-danger">ยกเลิกตอนนี้จะถูกหักเครดิต 1 ครั้ง</span>
+                <span className="t-small">
+                  เลยกำหนดยกเลิกฟรี ({fmtDay(freeUntil)} {fmtTime(freeUntil)} น.) แล้ว ภาคนี้จะเหลือ {Math.max(0, left - 1)} จาก {STRIKE_LIMIT} ครั้ง
+                  {left <= 1 && ' และจะสมัครกิจกรรมไม่ได้จนจบภาคการศึกษา'}
+                </span>
+              </div>
+              <div className="card row gap-12" style={{ padding: 14 }}>
+                <div className="stack grow">
+                  <span className="t-strong">มีเหตุสุดวิสัย เช่น ป่วยหรืออุบัติเหตุ</span>
+                  <span className="t-small">ติดต่อ {a.supervisor.name} ผู้คุมกิจกรรม ผู้คุมคืนเครดิตให้ได้</span>
+                </div>
+                <a className="icon-btn" href={`tel:${a.supervisor.phone.replace(/\D/g, '')}`} aria-label="โทรหาผู้คุมกิจกรรม">
+                  <PhoneIcon size={20} weight="fill" />
+                </a>
+              </div>
+            </>
+          ) : (
+            <p className="t-meta">
+              ยังยกเลิกได้ฟรีถึง {fmtDay(freeUntil)} {fmtTime(freeUntil)} น. ที่นั่งของคุณจะเปิดให้คนอื่นลงทะเบียนแทนทันที
+            </p>
+          )}
           <div className="stack gap-8 mt-8">
             <button
               className="btn btn-danger-soft btn-block"
               onClick={() => {
-                cancel(a.id)
+                const lost = cancel(a.id)
                 setSheet(null)
-                toast('ยกเลิกการลงทะเบียนแล้ว')
+                if (lost) toast.error('ยกเลิกแล้ว ถูกหักเครดิต 1 ครั้ง', { description: `ภาคนี้เหลือ ${Math.max(0, left - 1)} จาก ${STRIKE_LIMIT} ครั้ง` })
+                else toast('ยกเลิกการลงทะเบียนแล้ว')
               }}
             >
-              ยกเลิกการลงทะเบียน
+              {late ? 'ยกเลิกและเสียเครดิต' : 'ยกเลิกการลงทะเบียน'}
             </button>
             <button className="btn btn-ghost btn-block" onClick={() => setSheet(null)}>
               ไม่ยกเลิก
             </button>
           </div>
+        </div>
+      </Sheet>
+
+      <Sheet open={sheet === 'blocked'} onClose={() => setSheet(null)}>
+        <div className="stack gap-16">
+          <h2 className="t-title" style={{ fontSize: 22 }}>
+            เครดิตภาคนี้หมดแล้ว
+          </h2>
+          <p className="t-meta">
+            คุณยกเลิกหลังกำหนดหรือไม่มาครบ {STRIKE_LIMIT} ครั้งในภาคการศึกษานี้ จึงสมัครกิจกรรมใหม่ไม่ได้จนถึงภาคการศึกษาหน้า ดูรายละเอียดได้ที่หน้าโปรไฟล์
+          </p>
+          <p className="t-meta">ถ้าครั้งไหนมีเหตุสุดวิสัย ติดต่อผู้คุมกิจกรรมนั้นเพื่อขอคืนเครดิต</p>
+          <button className="btn btn-ink btn-block" onClick={() => navigate('/me')}>
+            ดูเครดิตของฉัน
+          </button>
         </div>
       </Sheet>
 
@@ -317,6 +418,24 @@ function DetailBody({
               )}
             </div>
           </div>
+          {ph === 'upcoming' && (
+            <div className="fact">
+              <div className="fact-ic">
+                <CalendarXIcon size={20} />
+              </div>
+              <div className="stack">
+                {a.opensAt && now < a.opensAt && (
+                  <span className="t-strong t-accent">
+                    เปิดรับสมัคร {fmtDay(a.opensAt)} {fmtTime(a.opensAt)} น.
+                  </span>
+                )}
+                <span className={a.opensAt && now < a.opensAt ? 't-meta' : 't-strong'}>
+                  ยกเลิกฟรีได้ถึง {fmtDay(freeCancelUntil(a))} {fmtTime(freeCancelUntil(a))} น.
+                </span>
+                <span className="t-meta">ยกเลิกหลังจากนั้นหรือไม่มา จะถูกหักเครดิต</span>
+              </div>
+            </div>
+          )}
           <div className="fact">
             <div className="fact-ic">
               <HourglassMediumIcon size={20} />

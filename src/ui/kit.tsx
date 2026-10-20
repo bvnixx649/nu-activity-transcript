@@ -366,6 +366,10 @@ export function PosterCard({
               <span className="chip success">ได้รับชั่วโมงแล้ว</span>
             ) : registered ? (
               <span className="chip ink">ลงทะเบียนแล้ว</span>
+            ) : a.opensAt && Date.now() < a.opensAt ? (
+              <span className="chip accent">
+                เปิดรับ {fmtDay(a.opensAt)} {fmtTime(a.opensAt)} น.
+              </span>
             ) : full ? (
               <span className="chip">เต็มแล้ว</span>
             ) : (
