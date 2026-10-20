@@ -37,6 +37,10 @@ export interface Activity {
   submittedAt?: number
   /** The centre recorded the hours in the university system. */
   recordedAt?: number
+  /** Supervisor hid the activity from students (registered students still see it). */
+  hidden?: boolean
+  /** With opensAt: students only see the activity once registration opens. */
+  hideUntilOpen?: boolean
   /** Demo data: its dates slide forward so the demo always has a live activity. */
   seed?: boolean
 }
@@ -84,6 +88,8 @@ export interface Notice {
   title: string
   body: string
   activityId?: string
+  /** Where tapping the notice goes. Defaults to the activity page. */
+  to?: string
   at: number
   read: boolean
 }
@@ -101,4 +107,17 @@ export interface LateCancel {
   activityId: string
   studentId: string
   at: number
+}
+
+/** Private message between one student and the supervisors of one activity, e.g. a reason for missing it. */
+export interface DirectMsg {
+  id: string
+  activityId: string
+  studentId: string
+  fromSup: boolean
+  authorName: string
+  text: string
+  at: number
+  /** Read by the other side. */
+  read: boolean
 }

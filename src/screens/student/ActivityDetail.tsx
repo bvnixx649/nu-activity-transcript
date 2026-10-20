@@ -9,6 +9,8 @@ import {
   CalendarXIcon,
   CaretRightIcon,
   ChatCircleDotsIcon,
+  ChatTeardropTextIcon,
+  EyeSlashIcon,
   CheckIcon,
   HourglassMediumIcon,
   LinkSimpleIcon,
@@ -26,6 +28,7 @@ import { CAT_LABEL, fmtDateLong, fmtDay, fmtHours, fmtRange, fmtTime, phase, rel
 import { useNow } from '../../lib/hooks'
 import { haptic } from '../../lib/device'
 import { creditsLeft, freeCancelUntil } from '../../lib/credit'
+import { isVisible } from '../../lib/stage'
 import { STRIKE_LIMIT } from '../../config'
 
 /** "อีก 2 วัน 4 ชม." style countdown. */
@@ -65,6 +68,17 @@ export default function ActivityDetail() {
         <div className="safe-top pad">
           <BackButton />
           <Empty icon={<CalendarBlankIcon size={26} />} title="ไม่พบกิจกรรมนี้" body="กิจกรรมอาจถูกลบหรือยังไม่ได้เผยแพร่" />
+        </div>
+      </Page>
+    )
+  }
+
+  if (!isVisible(a, now) && !isRegistered({ registrations, me }, a.id) && !myCredit({ credits, me }, a.id)) {
+    return (
+      <Page>
+        <div className="safe-top pad">
+          <BackButton />
+          <Empty icon={<EyeSlashIcon size={26} />} title="กิจกรรมนี้ยังไม่เปิดให้เห็น" body="ผู้คุมจะเปิดให้เห็นเมื่อพร้อมรับสมัคร เปิดการแจ้งเตือนไว้แล้วจะรู้ทันที" />
         </div>
       </Page>
     )
@@ -255,8 +269,11 @@ export default function ActivityDetail() {
               <div className="card row gap-12" style={{ padding: 14 }}>
                 <div className="stack grow">
                   <span className="t-strong">มีเหตุสุดวิสัย เช่น ป่วยหรืออุบัติเหตุ</span>
-                  <span className="t-small">ติดต่อ {a.supervisor.name} ผู้คุมกิจกรรม ผู้คุมคืนเครดิตให้ได้</span>
+                  <span className="t-small">ส่งข้อความหรือโทรหา {a.supervisor.name} ผู้คุมคืนเครดิตให้ได้</span>
                 </div>
+                <button className="icon-btn" onClick={() => navigate(`/a/${a.id}/dm`)} aria-label="ส่งข้อความถึงผู้คุมกิจกรรม">
+                  <ChatTeardropTextIcon size={20} weight="fill" />
+                </button>
                 <a className="icon-btn" href={`tel:${a.supervisor.phone.replace(/\D/g, '')}`} aria-label="โทรหาผู้คุมกิจกรรม">
                   <PhoneIcon size={20} weight="fill" />
                 </a>
@@ -324,6 +341,7 @@ function DetailBody({
   const y = useTransform(scrollY, [0, 420], [0, 140])
   const solid = useScrollY(300)
   const chats = useStore((s) => s.chats)
+  const dmUnread = useStore((s) => s.dms.filter((m) => m.activityId === a.id && m.studentId === s.me && m.fromSup && !m.read).length)
   const now = Date.now()
   const ph = phase(a, now)
 
@@ -471,6 +489,10 @@ function DetailBody({
             <span className="t-strong clamp-1">{a.supervisor.name}</span>
             <span className="t-small">ผู้คุมกิจกรรม โทร {a.supervisor.phone}</span>
           </div>
+          <button className="icon-btn" onClick={() => navigate(`/a/${a.id}/dm`)} aria-label="ส่งข้อความถึงผู้คุมกิจกรรม" style={{ position: 'relative' }}>
+            <ChatTeardropTextIcon size={20} weight="fill" />
+            {dmUnread > 0 && <span className="unread-dot" style={{ position: 'absolute', top: 4, right: 4 }} />}
+          </button>
           <a className="icon-btn" href={`tel:${a.supervisor.phone.replace(/\D/g, '')}`} aria-label="โทรหาผู้คุมกิจกรรม">
             <PhoneIcon size={20} weight="fill" />
           </a>

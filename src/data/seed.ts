@@ -1,4 +1,4 @@
-import type { Activity, ChatMsg, Credit, Notice, Registration, Student } from './types'
+import type { Activity, ChatMsg, Credit, DirectMsg, Notice, Registration, Student } from './types'
 
 const H = 3600_000
 const MIN = 60_000
@@ -575,3 +575,20 @@ export function personalNotices(now = Date.now()): Notice[] {
 export const PERSONAL_REGS = ['a-blood', 'a-wai', 'a-river']
 export const PERSONAL_CREDITS = ['p-dorm', 'p-orient', 'p-mural']
 export const PERSONAL_NOSHOW = ['p-bottle']
+
+/** A student explaining a missed activity, so the supervisor demo has an unread private message. */
+export function seedDms(st: Student | undefined, now = Date.now()): DirectMsg[] {
+  if (!st) return []
+  return [
+    {
+      id: 'dm-milk-1',
+      activityId: 'p-milk',
+      studentId: st.id,
+      fromSup: false,
+      authorName: st.name,
+      text: 'ขอโทษครับพี่ เมื่อวานผมไม่สบาย มีไข้ตั้งแต่เช้าเลยไปร่วมกิจกรรมไม่ได้ มีใบรับรองแพทย์จากหน่วยบริการสุขภาพครับ',
+      at: now - 3 * H,
+      read: false,
+    },
+  ]
+}

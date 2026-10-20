@@ -4,7 +4,9 @@ import { motion } from 'motion/react'
 import {
   ArrowsLeftRightIcon,
   CaretRightIcon,
+  ChatTeardropTextIcon,
   CheckCircleIcon,
+  EyeSlashIcon,
   ListChecksIcon,
   PaperPlaneTiltIcon,
   PlusIcon,
@@ -20,7 +22,7 @@ import { YearStats } from '../../ui/stats'
 import { fmtDay, fmtTime } from '../../lib/format'
 import { useNow } from '../../lib/hooks'
 import { AUTO_CLOSE_H } from '../../config'
-import { daysToSubmit, stage, type Stage } from '../../lib/stage'
+import { daysToSubmit, isVisible, stage, type Stage } from '../../lib/stage'
 
 const H = 3600_000
 
@@ -42,6 +44,8 @@ export default function SupHome() {
   const registrations = useStore((s) => s.registrations)
   const extraReg = useStore((s) => s.extraReg)
   const credits = useStore((s) => s.credits)
+  const dms = useStore((s) => s.dms)
+  const students = useStore((s) => s.students)
   const setMode = useStore((s) => s.setMode)
   const supLogout = useStore((s) => s.supLogout)
   const [menu, setMenu] = useState(false)
@@ -95,6 +99,21 @@ export default function SupHome() {
     })
     const order: Stage[] = ['live', 'closing', 'submit']
     todos.sort((x, y) => order.indexOf(stage(x.a, now)) - order.indexOf(stage(y.a, now)))
+    // unread private messages go first: a student is waiting for an answer
+    mine.forEach((a) => {
+      const unread = dms.filter((m) => m.activityId === a.id && !m.fromSup && !m.read)
+      if (!unread.length) return
+      const who = [...new Set(unread.map((m) => m.studentId))]
+      todos.unshift({
+        a,
+        icon: <ChatTeardropTextIcon size={22} weight="fill" />,
+        title: who.length > 1 ? `ข้อความใหม่จากนิสิต ${who.length} คน` : `ข้อความใหม่จาก ${students[who[0]]?.name ?? 'นิสิต'}`,
+        body: unread[unread.length - 1].text,
+        action: 'อ่าน',
+        to: who.length > 1 ? `/sup/a/${a.id}` : `/sup/a/${a.id}/dm/${who[0]}`,
+        urgent: true,
+      })
+    })
 
     const group = (ss: Stage[]) =>
       withStage.filter((x) => ss.includes(x.s)).sort((x, y) => x.a.start - y.a.start)
@@ -106,7 +125,7 @@ export default function SupHome() {
       waiting: group(['closing', 'submit', 'waiting']),
       done: group(['done']).reverse(),
     }
-  }, [activities, registrations, extraReg, credits, sup, now])
+  }, [activities, registrations, extraReg, credits, dms, students, sup, now])
 
   const dayList = day ? data.mine.filter((a) => dayKey(a.start) === day).sort((x, y) => x.start - y.start) : []
 
@@ -263,7 +282,14 @@ function SupRow({ a, i, count, now }: { a: Activity; i: number; count: number; n
           <span className="t-small">
             {fmtDay(a.start)} {fmtTime(a.start)} น. ลงทะเบียน <b className="num">{count}</b>/<span className="num">{a.capacity}</span>
           </span>
-          <StageMini s={stage(a, now)} />
+          <span className="row gap-8 wrap">
+            <StageMini s={stage(a, now)} />
+            {a.end > now && !isVisible(a, now) && (
+              <span className="row gap-4 t-small t-accent t-strong">
+                <EyeSlashIcon size={14} weight="bold" /> ซ่อนอยู่
+              </span>
+            )}
+          </span>
         </div>
         <CaretRightIcon size={18} className="t-faint" />
       </Link>

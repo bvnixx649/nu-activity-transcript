@@ -88,40 +88,58 @@ export default function Me() {
               </div>
             ))}
           </div>
+        </section>
 
+        <section className="card mt-16" style={{ padding: 20 }}>
+          <h2 className="t-h3">ประวัติเข้าร่วมกิจกรรม</h2>
+          <div className="row gap-8 wrap mt-8">
+            <span className="chip success">บันทึกลงระบบแล้ว</span>
+            <span className="chip warn">รอศูนย์บันทึก</span>
+            <span className="chip">รอผู้คุมส่งรายชื่อ</span>
+          </div>
           {(['volunteer', 'faculty'] as Category[]).map((c) =>
             byCat[c].length ? (
-              <div key={c} className="mt-24">
+              <div key={c} className="mt-20">
                 <h3 className="t-small t-strong">{CAT_LABEL[c]}</h3>
                 <div className="stack list mt-4">
-                  {byCat[c].map((cr, i) => (
-                    <motion.div
-                      key={cr.activityId}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.1 + i * 0.04 }}
-                    >
-                      <Link to={`/ticket/${cr.activityId}`} className="row gap-12 press" style={{ padding: '12px 0' }}>
-                        <div className="stack grow">
-                          <span className="clamp-1">{activities.find((a) => a.id === cr.activityId)?.title ?? cr.title}</span>
-                          <span className="t-small">
-                            {fmtDate(cr.at)} {cr.method === 'manual' ? 'ยืนยันโดยผู้คุม' : 'สแกน QR'}
-                            {activities.find((a) => a.id === cr.activityId)?.recordedAt ? (
-                              <b className="t-success"> บันทึกลงระบบแล้ว</b>
-                            ) : (
-                              ' รอศูนย์บันทึก'
-                            )}
+                  {byCat[c].map((cr, i) => {
+                    const a = activities.find((x) => x.id === cr.activityId)
+                    return (
+                      <motion.div
+                        key={cr.activityId}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.4, ease: EASE_OUT, delay: 0.1 + i * 0.04 }}
+                      >
+                        <Link to={`/ticket/${cr.activityId}`} className="row gap-12 press" style={{ padding: '14px 0' }}>
+                          <div className="stack grow gap-4" style={{ minWidth: 0 }}>
+                            <span className="clamp-2">{a?.title ?? cr.title}</span>
+                            <span className="t-small">
+                              {fmtDate(cr.at)} {cr.method === 'manual' ? 'ยืนยันโดยผู้คุม' : 'สแกน QR'}
+                            </span>
+                            <span>
+                              {a?.recordedAt ? (
+                                <span className="chip success">บันทึกลงระบบแล้ว</span>
+                              ) : a?.submittedAt ? (
+                                <span className="chip warn">รอศูนย์บันทึก</span>
+                              ) : (
+                                <span className="chip">รอผู้คุมส่งรายชื่อ</span>
+                              )}
+                            </span>
+                          </div>
+                          <span className="num t-strong" style={{ fontSize: 18 }}>
+                            +{fmtHours(cr.hours)}
                           </span>
-                        </div>
-                        <span className="num t-strong">+{fmtHours(cr.hours)}</span>
-                        <CaretRightIcon size={16} className="t-faint" />
-                      </Link>
-                    </motion.div>
-                  ))}
+                          <CaretRightIcon size={16} className="t-faint" />
+                        </Link>
+                      </motion.div>
+                    )
+                  })}
                 </div>
               </div>
             ) : null,
           )}
+          {byCat.volunteer.length + byCat.faculty.length === 0 && <p className="t-meta mt-12">ยังไม่มีกิจกรรมที่ได้รับชั่วโมง</p>}
         </section>
 
         <section className="card mt-16" style={{ padding: 20 }}>
@@ -150,12 +168,13 @@ export default function Me() {
           {strikes.length > 0 && (
             <div className="stack list mt-8">
               {strikes.map((x) => (
-                <Link key={`${x.kind}-${x.a.id}`} to={`/a/${x.a.id}`} className="row gap-12 press" style={{ padding: '12px 0' }}>
+                <Link key={`${x.kind}-${x.a.id}`} to={`/a/${x.a.id}/dm`} className="row gap-12 press" style={{ padding: '12px 0' }}>
                   <div className="stack grow" style={{ minWidth: 0 }}>
                     <span className="clamp-1">{x.a.title}</span>
                     <span className="t-small">
                       {fmtDate(x.at)} {x.kind === 'late' ? 'ยกเลิกหลังกำหนด' : 'ลงทะเบียนแต่ไม่มา'}
                     </span>
+                    {!x.waived && <span className="t-small t-accent t-strong">แตะเพื่อแจ้งเหตุผลกับผู้คุม</span>}
                   </div>
                   {x.waived ? <span className="chip success">คืนแล้ว</span> : <span className="chip danger">-1</span>}
                 </Link>

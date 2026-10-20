@@ -5,7 +5,9 @@ import { toast } from 'sonner'
 import {
   CaretRightIcon,
   ChatCircleDotsIcon,
+  ChatTeardropTextIcon,
   CheckCircleIcon,
+  EyeSlashIcon,
   HourglassIcon,
   ListChecksIcon,
   PaperPlaneTiltIcon,
@@ -22,10 +24,10 @@ import type { Activity, Student } from '../../data/types'
 import { StageBar } from '../../ui/stage'
 import { useNow } from '../../lib/hooks'
 import { AUTO_CLOSE_H } from '../../config'
-import { closedAt, daysToSubmit, stage, submitDeadline } from '../../lib/stage'
+import { closedAt, daysToSubmit, isVisible, stage, submitDeadline } from '../../lib/stage'
 import { waiverKey } from '../../lib/credit'
 import { FACULTIES } from '../../data/seed'
-import { Avatar, EASE_OUT, Empty, Lightbox, Page, Segmented, Sheet, TopBar } from '../../ui/kit'
+import { Avatar, EASE_OUT, Empty, Lightbox, Page, Segmented, Sheet, Switch, TopBar } from '../../ui/kit'
 import { CAT_LABEL, fmtDate, fmtDay, fmtHours, fmtRange, fmtTime, relDay, timeAgo } from '../../lib/format'
 import { compressImage, haptic } from '../../lib/device'
 
@@ -54,6 +56,8 @@ export default function Manage() {
   const waivers = useStore((s) => s.waivers)
   const lateCancels = useStore((s) => s.lateCancels)
   const waive = useStore((s) => s.waive)
+  const dms = useStore((s) => s.dms)
+  const setHidden = useStore((s) => s.setHidden)
 
   const roster = useMemo(() => {
     const cr = new Map(credits.filter((c) => c.activityId === id).map((c) => [c.studentId, c]))
@@ -73,6 +77,12 @@ export default function Manage() {
   )
   const msgCount = chats.filter((c) => c.activityId === id).length
   const closed = !!closedAt(a, now)
+  const threads = [...new Set(dms.filter((m) => m.activityId === a.id).map((m) => m.studentId))]
+    .map((sid) => {
+      const list = dms.filter((m) => m.activityId === a.id && m.studentId === sid)
+      return { sid, last: list[list.length - 1], unread: list.filter((m) => !m.fromSup && !m.read).length }
+    })
+    .sort((x, y) => y.unread - x.unread || y.last.at - x.last.at)
   const lateHere = lateCancels.filter((c) => c.activityId === a.id)
 
   const exportXlsx = async () => {
@@ -155,6 +165,59 @@ export default function Manage() {
               setFilter('wait')
             }}
           />
+
+          {threads.length > 0 && (
+            <div className="card mt-12" style={{ padding: '6px 16px' }}>
+              <div className="row between" style={{ padding: '10px 0 4px' }}>
+                <span className="t-strong">ข้อความจากนิสิต</span>
+                <span className="t-small">ส่วนตัว คนอื่นไม่เห็น</span>
+              </div>
+              <div className="stack list">
+                {threads.map((t) => (
+                  <button
+                    key={t.sid}
+                    className="row gap-12 press"
+                    style={{ padding: '12px 0', width: '100%', textAlign: 'left' }}
+                    onClick={() => navigate(`/sup/a/${a.id}/dm/${t.sid}`)}
+                  >
+                    <Avatar name={students[t.sid]?.name ?? t.sid} size={40} />
+                    <div className="stack grow" style={{ minWidth: 0 }}>
+                      <span className={`clamp-1 ${t.unread ? 't-strong' : ''}`}>{students[t.sid]?.name ?? t.sid}</span>
+                      <span className="t-small clamp-1">
+                        {t.last.fromSup ? 'คุณ: ' : ''}
+                        {t.last.text}
+                      </span>
+                    </div>
+                    {t.unread > 0 ? <span className="unread-dot" /> : <span className="t-small">{fmtTime(t.last.at)}</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {a.end > now && (
+            <div className="card row gap-12 mt-12" style={{ padding: 16 }}>
+              <EyeSlashIcon size={22} className={isVisible(a, now) ? 't-faint' : 't-accent'} style={{ flex: 'none' }} />
+              <div className="stack grow">
+                <span className="t-strong">แสดงให้นิสิตเห็น</span>
+                <span className="t-small">
+                  {a.hidden
+                    ? 'ซ่อนอยู่ นิสิตที่ยังไม่ลงทะเบียนจะไม่เห็นกิจกรรมนี้'
+                    : !isVisible(a, now) && a.opensAt
+                      ? `ซ่อนจนถึงเวลาเปิดรับ ${fmtDay(a.opensAt)} ${fmtTime(a.opensAt)} น.`
+                      : 'นิสิตทุกคนเห็นกิจกรรมนี้ในหน้าแรก'}
+                </span>
+              </div>
+              <Switch
+                label="แสดงให้นิสิตเห็น"
+                checked={!a.hidden}
+                onChange={(v) => {
+                  setHidden(a.id, !v)
+                  toast(v ? 'แสดงกิจกรรมแล้ว' : 'ซ่อนกิจกรรมแล้ว', { description: v ? undefined : 'คนที่ลงทะเบียนแล้วยังเห็นอยู่' })
+                }}
+              />
+            </div>
+          )}
 
           {a.chatEnabled && (
             <button className="card row gap-12 press mt-12" style={{ padding: 14, width: '100%', textAlign: 'left' }} onClick={() => navigate(`/sup/a/${a.id}/chat`)}>
@@ -261,6 +324,9 @@ export default function Manage() {
                             <span className="clamp-1">{st?.name ?? c.studentId}</span>
                             <span className="t-small">ยกเลิก {fmtDay(c.at)} {fmtTime(c.at)} น.</span>
                           </div>
+                          <button className="icon-btn" onClick={() => navigate(`/sup/a/${a.id}/dm/${c.studentId}`)} aria-label="ส่งข้อความ">
+                            <ChatTeardropTextIcon size={18} weight="fill" />
+                          </button>
                           {given ? (
                             <span className="chip">คืนแล้ว</span>
                           ) : (
@@ -287,7 +353,17 @@ export default function Manage() {
         </div>
       </Page>
 
-      <RosterActions student={picked} activityId={a.id} hours={a.hours} closed={closed} onClose={() => setPicked(null)} />
+      <RosterActions
+        student={picked}
+        activityId={a.id}
+        hours={a.hours}
+        closed={closed}
+        onClose={() => setPicked(null)}
+        onMessage={(sid) => {
+          setPicked(null)
+          navigate(`/sup/a/${a.id}/dm/${sid}`)
+        }}
+      />
       <AddStudent open={adding} activityId={a.id} onClose={() => setAdding(false)} />
       <Lightbox src={lightbox} onClose={() => setLightbox(null)} />
       <Sheet open={!!confirm} onClose={() => setConfirm(null)}>
@@ -452,16 +528,19 @@ function RosterActions({
   hours,
   closed,
   onClose,
+  onMessage,
 }: {
   student: Student | null
   activityId: string
   hours: number
   closed: boolean
   onClose: () => void
+  onMessage: (studentId: string) => void
 }) {
   const credits = useStore((s) => s.credits)
   const waivers = useStore((s) => s.waivers)
   const waive = useStore((s) => s.waive)
+  const unread = useStore((s) => (student ? s.dms.filter((m) => m.activityId === activityId && m.studentId === student.id && !m.fromSup && !m.read).length : 0))
   const addWalkIn = useStore((s) => s.addWalkIn)
   const revoke = useStore((s) => s.revokeCredit)
   const remove = useStore((s) => s.removeRegistration)
@@ -506,6 +585,9 @@ function RosterActions({
             </div>
           )}
           <div className="stack gap-8">
+            <button className="btn btn-soft btn-block" onClick={() => onMessage(student.id)}>
+              <ChatTeardropTextIcon size={18} weight="fill" /> ส่งข้อความ{unread > 0 && ` (ใหม่ ${unread})`}
+            </button>
             {credit ? (
               <button
                 className="btn btn-soft btn-block"

@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
 import { toast } from 'sonner'
-import type { Activity, ChatMsg, Credit, LateCancel, Notice, NoticeKind, NotifySettings, Registration, Student } from './data/types'
+import type { Activity, ChatMsg, Credit, DirectMsg, LateCancel, Notice, NoticeKind, NotifySettings, Registration, Student } from './data/types'
 import {
   EXTRA_REGISTERED,
   ORGS,
@@ -12,6 +12,7 @@ import {
   seedActivities,
   seedChats,
   seedRegistrations,
+  seedDms,
   seedStudents,
 } from './data/seed'
 import { hashPin } from './lib/qr'
@@ -44,6 +45,7 @@ interface Data {
   /** Scheduled activities the student asked to be told about when registration opens. */
   reminders: string[]
   reminded: string[]
+  dms: DirectMsg[]
   settings: NotifySettings
   me: string | null
   sup: SupSession | null
@@ -63,6 +65,10 @@ interface Actions {
   waive: (activityId: string, studentId: string) => void
   toggleReminder: (activityId: string) => void
   checkReminders: () => void
+  sendDm: (activityId: string, studentId: string, text: string, fromSup: boolean) => void
+  /** Marks the other side's messages in a thread as read. */
+  readDm: (activityId: string, studentId: string, asSup: boolean) => void
+  setHidden: (activityId: string, hidden: boolean) => void
   addCredit: (c: Credit) => boolean
   revokeCredit: (activityId: string, studentId: string) => void
   addWalkIn: (activityId: string, s: Student) => void
@@ -73,7 +79,7 @@ interface Actions {
   recordHours: (activityId: string) => void
   postAnnouncement: (activityId: string, text: string, images: string[]) => void
   sendChat: (activityId: string, text: string, asSup: boolean) => void
-  notify: (kind: NoticeKind, title: string, body: string, activityId?: string) => void
+  notify: (kind: NoticeKind, title: string, body: string, activityId?: string, to?: string) => void
   markAllRead: () => void
   setSettings: (p: Partial<NotifySettings>) => void
   supLogin: (code: string, name: string) => boolean
@@ -102,6 +108,13 @@ function freshData(): Data {
     waivers: [],
     reminders: [],
     reminded: [],
+    // someone who registered for p-milk but did not scan explains why
+    dms: seedDms(
+      students.find(
+        (st) => regs.some((r) => r.activityId === 'p-milk' && r.studentId === st.id) && !credits.some((c) => c.activityId === 'p-milk' && c.studentId === st.id),
+      ),
+      now,
+    ),
     settings: { enabled: false, newActivities: true, announcements: true, chat: false, reminders: true },
     me: null,
     sup: null,
@@ -220,6 +233,25 @@ export const useStore = create<State>()(
           reminders: s.reminders.includes(activityId) ? s.reminders.filter((x) => x !== activityId) : [...s.reminders, activityId],
         })),
 
+      sendDm: (activityId, studentId, text, fromSup) => {
+        const { sup, students, activities, me } = get()
+        const authorName = fromSup ? sup?.name ?? 'ผู้คุมกิจกรรม' : students[studentId]?.name ?? studentId
+        set((s) => ({ dms: [...s.dms, { id: uid(), activityId, studentId, fromSup, authorName, text, at: Date.now(), read: false }] }))
+        const a = activities.find((x) => x.id === activityId)
+        if (fromSup && a && studentId === me)
+          get().notify('chat', `ข้อความจากผู้คุม ${a.title}`, text.length > 90 ? text.slice(0, 88) + '...' : text, a.id, `/a/${a.id}/dm`)
+      },
+
+      readDm: (activityId, studentId, asSup) =>
+        set((s) => ({
+          dms: s.dms.map((m) =>
+            m.activityId === activityId && m.studentId === studentId && m.fromSup !== asSup && !m.read ? { ...m, read: true } : m,
+          ),
+        })),
+
+      setHidden: (activityId, hidden) =>
+        set((s) => ({ activities: s.activities.map((x) => (x.id === activityId ? { ...x, hidden } : x)) })),
+
       checkReminders: () => {
         const { reminders, reminded, activities } = get()
         const now = Date.now()
@@ -268,7 +300,7 @@ export const useStore = create<State>()(
         set((s) => ({
           activities: isNew ? [a, ...s.activities] : s.activities.map((x) => (x.id === a.id ? a : x)),
         }))
-        if (isNew) get().notify('new', `กิจกรรมใหม่จาก${a.org}`, `${a.title} ได้รับ ${a.hours} ชั่วโมง`, a.id)
+        if (isNew && !a.hidden && !a.hideUntilOpen) get().notify('new', `กิจกรรมใหม่จาก${a.org}`, `${a.title} ได้รับ ${a.hours} ชั่วโมง`, a.id)
       },
 
       closeRoster: (activityId) =>
@@ -309,13 +341,14 @@ export const useStore = create<State>()(
         set((s) => ({ chats: [...s.chats, { id: uid(), activityId, authorId, authorName, text, at: Date.now(), sup: asSup }] }))
       },
 
-      notify: (kind, title, body, activityId) => {
+      notify: (kind, title, body, activityId, to) => {
         const { settings } = get()
+        // a private reply is always delivered; the chat switch is for group chat noise
         const allowed =
-          kind === 'new' ? settings.newActivities : kind === 'announce' ? settings.announcements : kind === 'chat' ? settings.chat : true
+          kind === 'new' ? settings.newActivities : kind === 'announce' ? settings.announcements : kind === 'chat' ? settings.chat || !!to : true
         if (!allowed) return
-        set((s) => ({ notices: [{ id: uid(), kind, title, body, activityId, at: Date.now(), read: false }, ...s.notices].slice(0, 60) }))
-        if (settings.enabled) systemNotify(title, body, activityId ? `/a/${activityId}` : '/inbox')
+        set((s) => ({ notices: [{ id: uid(), kind, title, body, activityId, to, at: Date.now(), read: false }, ...s.notices].slice(0, 60) }))
+        if (settings.enabled) systemNotify(title, body, to ?? (activityId ? `/a/${activityId}` : '/inbox'))
       },
 
       markAllRead: () => set((s) => ({ notices: s.notices.map((n) => (n.read ? n : { ...n, read: true })) })),
@@ -364,6 +397,7 @@ export const useStore = create<State>()(
           chats: s.chats.map((c) => ({ ...c, at: sh(c.at) })),
           notices: s.notices.map((n) => ({ ...n, at: sh(n.at) })),
           lateCancels: s.lateCancels.map((c) => ({ ...c, at: sh(c.at) })),
+          dms: s.dms.map((m) => ({ ...m, at: sh(m.at) })),
         }))
       },
 
@@ -384,7 +418,7 @@ export const useStore = create<State>()(
     {
       name: 'nuat-demo-v1',
       storage: createJSONStorage(() => safeStorage),
-      version: 4,
+      version: 5,
       // v2 added workflow stages and a year of history: reseed, keeping the signed-in student.
       migrate: (old) => ({ ...(old as object), reseed: true }) as State,
     },

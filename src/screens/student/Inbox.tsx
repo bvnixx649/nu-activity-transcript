@@ -101,7 +101,7 @@ export default function Inbox() {
                   key={n.id}
                   className="row gap-12 press"
                   style={{ padding: '14px 0', alignItems: 'flex-start', textAlign: 'left', width: '100%' }}
-                  onClick={() => n.activityId && navigate(`/a/${n.activityId}`)}
+                  onClick={() => (n.to ? navigate(n.to) : n.activityId && navigate(`/a/${n.activityId}`))}
                 >
                   <div
                     className="fact-ic"

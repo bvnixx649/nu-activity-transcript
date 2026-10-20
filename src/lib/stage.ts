@@ -83,3 +83,9 @@ export function yearMonths(t = Date.now()) {
     return [s, e] as const
   })
 }
+
+/** Whether students who are not registered can see the activity. */
+export function isVisible(a: Activity, now = Date.now()) {
+  if (a.hidden) return false
+  return !(a.hideUntilOpen && a.opensAt && now < a.opensAt)
+}

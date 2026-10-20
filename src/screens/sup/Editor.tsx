@@ -50,6 +50,7 @@ export default function Editor() {
     hours: existing?.hours ?? HOUR_LOTS[1],
     capacity: existing?.capacity ?? 30,
     scheduled: !!existing?.opensAt,
+    hideUntilOpen: !!existing?.hideUntilOpen,
     openDate: toDate(existing?.opensAt ?? openDefault.getTime()),
     openT: toTime(existing?.opensAt ?? openDefault.getTime()),
     cancelDays: existing?.cancelDays ?? CANCEL_DAYS,
@@ -114,6 +115,8 @@ export default function Editor() {
     hours: f.hours,
     capacity: f.capacity,
     opensAt,
+    hideUntilOpen: f.scheduled && f.hideUntilOpen ? true : undefined,
+    hidden: existing?.hidden,
     cancelDays: f.cancelDays,
     supervisor: { name: sup.name, phone: f.phone.trim() || '-' },
     chatEnabled: f.chatEnabled,
@@ -285,10 +288,28 @@ export default function Editor() {
                     <div className="row gap-12">
                       <div className="stack grow">
                         <span className="t-strong">ตั้งเวลาเปิดรับสมัคร</span>
-                        <span className="t-small">นิสิตเห็นกิจกรรมล่วงหน้า แต่กดสมัครได้เมื่อถึงเวลา</span>
+                        <span className="t-small">กดสมัครได้เมื่อถึงเวลาที่ตั้ง</span>
                       </div>
                       <Switch label="ตั้งเวลาเปิดรับสมัคร" checked={f.scheduled} onChange={(v) => set('scheduled', v)} />
                     </div>
+                    {f.scheduled && (
+                      <div className="mt-16">
+                        <Segmented
+                          id="ed-vis"
+                          value={f.hideUntilOpen ? 'hide' : 'show'}
+                          onChange={(v) => set('hideUntilOpen', v === 'hide')}
+                          options={[
+                            { value: 'show', label: 'ให้เห็นล่วงหน้า' },
+                            { value: 'hide', label: 'ซ่อนจนถึงเวลาเปิด' },
+                          ]}
+                        />
+                        <p className="t-small mt-8">
+                          {f.hideUntilOpen
+                            ? 'นิสิตจะไม่เห็นกิจกรรมนี้เลยจนถึงเวลาเปิดรับ แล้วจะขึ้นพร้อมกันทุกคน'
+                            : 'นิสิตเห็นกิจกรรมล่วงหน้า นับถอยหลัง และกดเตือนฉันได้'}
+                        </p>
+                      </div>
+                    )}
                     {f.scheduled && (
                       <div className="row gap-12 mt-16">
                         <div className="field grow">
@@ -359,6 +380,9 @@ export default function Editor() {
                       value={opensAt ? `${fmtDay(opensAt)} ${fmtTime(opensAt)} น.` : 'ทันทีที่เผยแพร่'}
                       onEdit={() => go(2)}
                     />
+                    {opensAt && (
+                      <Summary label="การมองเห็น" value={f.hideUntilOpen ? 'ซ่อนจนถึงเวลาเปิดรับ' : 'เห็นล่วงหน้า'} onEdit={() => go(2)} />
+                    )}
                     <Summary label="ยกเลิกได้ถึง" value={f.cancelDays === 0 ? 'ก่อนเริ่มงาน' : `${f.cancelDays} วันก่อนกิจกรรม`} onEdit={() => go(2)} />
                     <Summary label="ติดต่อ" value={f.phone.trim() || 'ยังไม่ได้ใส่เบอร์'} onEdit={() => go(3)} />
                   </div>

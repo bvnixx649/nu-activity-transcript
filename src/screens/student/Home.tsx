@@ -8,6 +8,7 @@ import { Avatar, CountUp, EASE_OUT, Empty, Page, PosterCard, Segmented } from '.
 import { fmtHours, fmtTime, phase } from '../../lib/format'
 import { useNow, useSessionState } from '../../lib/hooks'
 import { MonthCalendar, dayKey } from '../../ui/calendar'
+import { isVisible } from '../../lib/stage'
 
 type Filter = 'all' | Category
 
@@ -36,7 +37,7 @@ export default function Home() {
     const credited = new Set(myCredits.map((c) => c.activityId))
     const live = activities.find((a) => phase(a, now) === 'live' && mine.has(a.id) && !credited.has(a.id))
     const feed = activities
-      .filter((a) => a.end > now && (filter === 'all' || a.category === filter))
+      .filter((a) => a.end > now && (filter === 'all' || a.category === filter) && (isVisible(a, now) || mine.has(a.id)))
       .sort((a, b) => a.start - b.start)
       .map((a) => ({
         a,

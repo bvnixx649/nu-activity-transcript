@@ -14,6 +14,7 @@ import Me from './screens/student/Me'
 import NotifySettings from './screens/student/NotifySettings'
 import ActivityDetail from './screens/student/ActivityDetail'
 import ChatScreen from './screens/student/Chat'
+import DirectMessage from './screens/student/DirectMessage'
 import Scan from './screens/student/Scan'
 import Claim, { TicketView } from './screens/student/Claim'
 import SupLogin from './screens/sup/SupLogin'
@@ -171,6 +172,7 @@ function Shell() {
             <Route path="/settings/notify" element={<NotifySettings />} />
             <Route path="/a/:id" element={<ActivityDetail />} />
             <Route path="/a/:id/chat" element={<ChatScreen role="student" />} />
+            <Route path="/a/:id/dm" element={<DirectMessage role="student" />} />
             <Route path="/scan" element={<Scan />} />
             <Route path="/claim" element={<Claim />} />
             <Route path="/ticket/:id" element={<TicketView />} />
@@ -180,6 +182,7 @@ function Shell() {
             <Route path="/sup/edit/:id" element={<Editor />} />
             <Route path="/sup/a/:id" element={<Manage />} />
             <Route path="/sup/a/:id/chat" element={<ChatScreen role="sup" />} />
+            <Route path="/sup/a/:id/dm/:sid" element={<DirectMessage role="sup" />} />
             <Route path="/sup/a/:id/qr" element={<Presenter />} />
             <Route path="/sup/admin" element={<AdminHome />} />
             <Route path="/sup/admin/a/:id" element={<AdminActivity />} />
