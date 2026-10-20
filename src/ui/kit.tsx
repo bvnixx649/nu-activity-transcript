@@ -341,13 +341,17 @@ export function PosterCard({
   index?: number
 }) {
   const full = seatsLeft <= 0
+  const locked = !!a.opensAt && Date.now() < a.opensAt
+  const taken = Math.max(0, a.capacity - seatsLeft)
+  const fill = Math.min(1, taken / a.capacity)
+  const tone = fill >= 0.9 ? 'danger' : fill >= 0.7 ? 'warn' : 'ok'
   return (
     <motion.div
       initial={{ opacity: 0, transform: 'translateY(14px)' }}
       animate={{ opacity: 1, transform: 'translateY(0px)' }}
       transition={{ duration: 0.5, ease: EASE_OUT, delay: Math.min(index, 6) * 0.05 }}
     >
-      <Link to={`/a/${a.id}`} className="pcard press">
+      <Link to={`/a/${a.id}`} className={`pcard press ${locked ? 'locked' : ''}`}>
         <div className="pcard-img">
           <img src={a.poster} alt="" loading={index > 1 ? 'lazy' : 'eager'} />
         </div>
@@ -366,9 +370,9 @@ export function PosterCard({
               <span className="chip success">ได้รับชั่วโมงแล้ว</span>
             ) : registered ? (
               <span className="chip ink">ลงทะเบียนแล้ว</span>
-            ) : a.opensAt && Date.now() < a.opensAt ? (
-              <span className="chip accent">
-                เปิดรับ {fmtDay(a.opensAt)} {fmtTime(a.opensAt)} น.
+            ) : locked ? (
+              <span className="chip">
+                เปิดรับ {fmtDay(a.opensAt!)} {fmtTime(a.opensAt!)} น.
               </span>
             ) : full ? (
               <span className="chip">เต็มแล้ว</span>
@@ -376,6 +380,16 @@ export function PosterCard({
               <span className="chip accent">เหลือ {seatsLeft} ที่</span>
             )}
           </div>
+          {!credited && !locked && (
+            <div className={`seatbar ${tone}`} aria-label={`ลงทะเบียนแล้ว ${taken} จาก ${a.capacity} คน`}>
+              <span className="seatbar-track">
+                <i style={{ width: `${fill * 100}%` }} />
+              </span>
+              <span className="t-small num">
+                {taken}/{a.capacity}
+              </span>
+            </div>
+          )}
         </div>
       </Link>
     </motion.div>

@@ -171,18 +171,6 @@ export default function Editor() {
                     <label htmlFor="t">ชื่อกิจกรรม</label>
                     <input id="t" className="input" value={f.title} onChange={(e) => set('title', e.target.value)} placeholder="เช่น เก็บขยะริมแม่น้ำน่าน" />
                   </div>
-                  <div className="field">
-                    <span className="field-label">ประเภทชั่วโมง</span>
-                    <Segmented
-                      id="ed-cat"
-                      value={f.category}
-                      onChange={(v) => set('category', v)}
-                      options={[
-                        { value: 'volunteer', label: 'จิตอาสา' },
-                        { value: 'faculty', label: 'กิจกรรมคณะ' },
-                      ]}
-                    />
-                  </div>
                   <div className="stack gap-10">
                     <span className="field-label">รูปหรือโปสเตอร์</span>
                     <label className="upload-box press tappable">
@@ -373,7 +361,7 @@ export default function Editor() {
                     <PosterCard a={build()} registered={false} credited={false} seatsLeft={f.capacity} />
                   </div>
                   <div className="card stack list" style={{ padding: '0 16px' }}>
-                    <Summary label="ชั่วโมง" value={`${f.hours} ชั่วโมง${f.category === 'volunteer' ? 'จิตอาสา' : 'กิจกรรมคณะ'}`} onEdit={() => go(2)} />
+                    <Summary label="ชั่วโมง" value={`${f.hours} ชั่วโมงจิตอาสา`} onEdit={() => go(2)} />
                     <Summary label="รับ" value={`${f.capacity} คน`} onEdit={() => go(2)} />
                     <Summary
                       label="เปิดรับสมัคร"

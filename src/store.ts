@@ -418,7 +418,7 @@ export const useStore = create<State>()(
     {
       name: 'nuat-demo-v1',
       storage: createJSONStorage(() => safeStorage),
-      version: 5,
+      version: 6,
       // v2 added workflow stages and a year of history: reseed, keeping the signed-in student.
       migrate: (old) => ({ ...(old as object), reseed: true }) as State,
     },

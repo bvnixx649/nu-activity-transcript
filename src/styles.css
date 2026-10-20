@@ -916,3 +916,16 @@ select.input { appearance: none; background-image: none; }
 .quick-replies::-webkit-scrollbar { display: none; }
 .quick-replies .chip { flex: none; height: 34px; }
 .unread-dot { width: 9px; height: 9px; border-radius: 99px; background: var(--accent); flex: none; }
+
+/* not open for registration yet: muted poster */
+.pcard.locked .pcard-img img { filter: grayscale(1); opacity: 0.55; }
+.pcard.locked .pcard-body { opacity: 0.75; }
+.seatbar { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.seatbar-track { flex: 1; height: 8px; border-radius: 99px; background: var(--fill); overflow: hidden; }
+.seatbar-track i { display: block; height: 100%; border-radius: 99px; background: var(--success); transition: width 0.6s var(--ease-out); }
+.seatbar.warn .seatbar-track i { background: #e0a100; }
+.seatbar.danger .seatbar-track i { background: var(--danger); }
+.seatbar.danger .num { color: var(--danger); font-weight: 600; }
+.filter-row { display: flex; gap: 8px; overflow-x: auto; margin: 12px -20px 0; padding: 0 20px 4px; scrollbar-width: none; }
+.filter-row::-webkit-scrollbar { display: none; }
+.filter-row .chip { flex: none; height: 36px; padding: 0 14px; }

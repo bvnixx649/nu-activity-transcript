@@ -71,23 +71,9 @@ export default function Me() {
             <span className="num" style={{ fontSize: 48, fontWeight: 700, lineHeight: 1 }}>
               <CountUp value={total} decimals={Number.isInteger(total) ? 0 : 1} />
             </span>
-            <span className="t-meta t-strong">ชั่วโมงรวม</span>
+            <span className="t-meta t-strong">ชั่วโมงจิตอาสา</span>
           </div>
-
-          <div className="row gap-12 mt-20">
-            {(['volunteer', 'faculty'] as Category[]).map((c) => (
-              <div key={c} className="stack grow" style={{ padding: 14, borderRadius: 16, background: 'var(--surface-2)' }}>
-                <span className="t-small row gap-6">
-                  <i style={{ width: 10, height: 10, borderRadius: 3, background: c === 'volunteer' ? 'var(--accent)' : 'var(--grey)' }} />
-                  {CAT_LABEL[c]}
-                </span>
-                <span className="num mt-4" style={{ fontSize: 26, fontWeight: 700 }}>
-                  {fmtHours(sum(c))} <span className="t-small">ชม.</span>
-                </span>
-                <span className="t-small">{byCat[c].length} กิจกรรม</span>
-              </div>
-            ))}
-          </div>
+          <span className="t-small">จาก {byCat.volunteer.length + byCat.faculty.length} กิจกรรม</span>
         </section>
 
         <section className="card mt-16" style={{ padding: 20 }}>
@@ -99,8 +85,7 @@ export default function Me() {
           </div>
           {(['volunteer', 'faculty'] as Category[]).map((c) =>
             byCat[c].length ? (
-              <div key={c} className="mt-20">
-                <h3 className="t-small t-strong">{CAT_LABEL[c]}</h3>
+              <div key={c} className="mt-12">
                 <div className="stack list mt-4">
                   {byCat[c].map((cr, i) => {
                     const a = activities.find((x) => x.id === cr.activityId)

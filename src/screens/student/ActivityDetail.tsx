@@ -392,7 +392,6 @@ function DetailBody({
           transition={{ duration: 0.5, ease: EASE_OUT, delay: 0.12 }}
         >
           <div className="row gap-8 wrap">
-            <span className={`chip ${a.category === 'volunteer' ? 'accent' : ''}`}>{CAT_LABEL[a.category]}</span>
             {ph === 'live' && (
               <span className="chip ink">
                 <span className="dot-live" /> กำลังดำเนินอยู่
